@@ -306,7 +306,7 @@ textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25);
 @keyframes dot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
 
 /* ---- immersive table ---- */
-.tv { position: fixed; inset: 0; overflow: auto; overscroll-behavior: contain; background: radial-gradient(ellipse at 50% 35%, #123f2e, #071e15 75%); display: flex; flex-direction: column; }
+.tv { position: fixed; inset: 0; height: 100dvh; overflow: hidden; overscroll-behavior: contain; background: radial-gradient(ellipse at 50% 35%, #123f2e, #071e15 75%); display: flex; flex-direction: column; }
 .tv-felt { position: fixed; left: -35%; right: -35%; top: 150px; bottom: 190px; z-index: 0; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, #1f7a4f, #135a3a 60%, #0f4a2f); border: 14px solid #3b2314; box-shadow: inset 0 0 60px rgba(0,0,0,.5), 0 10px 40px rgba(0,0,0,.6); }
 .tv-top { position: relative; z-index: 2; flex: none; display: flex; align-items: center; gap: 8px; padding: calc(var(--safe-top) + 8px) 12px 4px; }
 .tv-top .info { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
@@ -354,8 +354,6 @@ textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25);
 .netbar { position: absolute; left: 50%; top: calc(var(--safe-top) + 60px); transform: translateX(-50%); z-index: 5; background: rgba(0,0,0,.8); color: #fff; padding: 8px 14px; border-radius: 999px; font-size: 13px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .tv .actions button.big { min-height: 58px; font-size: 18px; }
 .lang-zh .tv .actions button.big { min-height: 68px; }
-@media (max-height: 780px) { .tv .mycards .sq { width: 72px; height: 102px; } .tv .sq-face .ix b { font-size: 22px; } .tv .sq-face .ix i { font-size: 18px; } .tv .sq-face .pip { font-size: 38px; } .tv .mycards { padding: 2px 0 2px; } .tv .cardtools { margin: 0 0 4px; } .tv .actions button.big { min-height: 50px; font-size: 16px; } }
-@media (max-height: 700px) { .tv.hu .opp .bust { height: 70px; margin-top: -20px; } .tv.hu .opp .avatar { width: 92px; height: 92px; font-size: 48px; } .tv-center { min-height: 120px; } .tv .pcard.md { width: 38px; height: 54px; font-size: 17px; } .tv .mycards .sq { width: 64px; height: 90px; } .tv .opp-cards { min-height: 30px; } }
 
 .net.pos { color: var(--green); }
 .net.neg { color: var(--red); }
@@ -364,3 +362,50 @@ textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25);
 .results div.lose { opacity: .85; }
 .pl .tag.lose { background: rgba(229, 72, 77, 0.85); color: #fff; }
 .opp-won { font-weight: 900; }
+
+/* ---- fluid sizing so the table always fits the viewport height (no scrolling while playing) ---- */
+.tv-top { padding-top: calc(var(--safe-top) + 4px); padding-bottom: 2px; }
+.tv-top .info b { font-size: clamp(12px, 1.8dvh, 15px); }
+.tv-top .info span { font-size: clamp(10px, 1.45dvh, 12px); }
+.tv-top .icon { width: clamp(34px, 5dvh, 44px); min-height: clamp(34px, 5dvh, 44px); }
+.tv .opp .bust { height: clamp(40px, 7.5dvh, 62px); margin-top: clamp(-10px, -1dvh, -4px); }
+.tv .opp .avatar { width: clamp(40px, 7.5dvh, 64px); height: clamp(40px, 7.5dvh, 64px); font-size: clamp(20px, 4dvh, 34px); }
+.tv.hu .opp .bust { height: clamp(52px, 10.5dvh, 92px); margin-top: clamp(-26px, -3dvh, -12px); }
+.tv.hu .opp .avatar { width: clamp(64px, 13.5dvh, 118px); height: clamp(64px, 13.5dvh, 118px); font-size: clamp(34px, 7.5dvh, 64px); }
+.tv.many .opp .bust { height: clamp(34px, 5.5dvh, 46px); }
+.tv.many .opp .avatar { width: clamp(34px, 5.5dvh, 48px); height: clamp(34px, 5.5dvh, 48px); font-size: clamp(18px, 3dvh, 26px); }
+.tv .opp-name { font-size: clamp(12px, 1.7dvh, 14px); }
+.tv .opp-stack, .tv .opp-bet { font-size: clamp(11px, 1.5dvh, 13px); }
+.tv .opp-cards { min-height: clamp(24px, 4.2dvh, 38px); margin-top: 2px; }
+.tv .opp-cards .pcard.sm, .tv .results .pcard.sm { width: clamp(17px, 3dvh, 26px); height: clamp(24px, 4.2dvh, 36px); font-size: clamp(9px, 1.5dvh, 13px); }
+.tv .opp-cards .pcard.sm i, .tv .results .pcard.sm i { font-size: clamp(8px, 1.3dvh, 11px); }
+.tv-center { margin-top: 2px; min-height: 0; padding-bottom: 2px; }
+.tv-pot { font-size: clamp(12px, 1.9dvh, 16px); padding: 4px 12px; }
+.tv-pot .stack.sm .chip { width: clamp(14px, 2.4dvh, 22px); height: clamp(5px, .9dvh, 8px); }
+.tv-center .board { margin-top: clamp(4px, 1dvh, 10px); gap: clamp(3px, .7dvh, 6px); }
+.tv .pcard.md { width: clamp(30px, 7.2dvh, 44px); height: clamp(42px, 10.2dvh, 62px); font-size: clamp(13px, 2.4dvh, 20px); border-radius: clamp(3px, .6dvh, 6px); }
+.tv .pcard.md i { font-size: clamp(10px, 1.9dvh, 16px); }
+.tv-me { padding: 4px 12px calc(var(--safe-bottom) + 6px); }
+.tv .merow .avatar.sm { width: clamp(28px, 4.6dvh, 40px); height: clamp(28px, 4.6dvh, 40px); font-size: clamp(15px, 2.6dvh, 22px); }
+.tv .mycards { padding: clamp(2px, .6dvh, 6px) 0 2px; gap: clamp(6px, 1.2dvh, 10px); }
+.tv .mycards .sq { height: clamp(70px, 15.5dvh, 130px); width: auto; aspect-ratio: 92 / 130; font-size: clamp(16px, 3.4dvh, 28px); }
+.tv .sq-face .ix b { font-size: 1em; }
+.tv .sq-face .ix i { font-size: .8em; }
+.tv .sq-face .pip { font-size: 1.7em; }
+.tv .sq-face .ix.tl { top: 4%; left: 8%; }
+.tv .sq-face .ix.br { bottom: 4%; right: 8%; }
+.tv .cardtools { margin: 0 0 clamp(2px, .6dvh, 6px); }
+.tv .cardtools .hint { font-size: clamp(10px, 1.4dvh, 12px); }
+.tv .cardtools button.small { min-height: clamp(28px, 4dvh, 36px); padding: 2px 10px; font-size: clamp(12px, 1.6dvh, 14px); }
+.tv .meact .who { margin: 2px 0 clamp(4px, .8dvh, 8px); }
+.tv .meact .who b { font-size: clamp(15px, 2.4dvh, 20px); }
+.tv .meact .who span { font-size: clamp(11px, 1.5dvh, 13px); }
+.tv .meact .msg { padding: clamp(2px, .6dvh, 6px) 0; font-size: clamp(13px, 1.8dvh, 15px); }
+.tv .meact .msg.wait { font-size: clamp(14px, 2.2dvh, 18px); padding: clamp(6px, 1.6dvh, 14px) 0; }
+.tv .actions { gap: clamp(5px, 1dvh, 8px); }
+.tv .actions button.big { min-height: clamp(40px, 6.6dvh, 58px); font-size: clamp(13px, 2.1dvh, 18px); padding: 4px 8px; }
+.tv .meact button.big.primary { min-height: clamp(40px, 6.6dvh, 58px); font-size: clamp(14px, 2.2dvh, 20px); }
+.tv .results.compact { max-height: 24dvh; overflow-y: auto; margin: 2px 0 6px; }
+.tv .results.compact div { padding: 2px 4px; font-size: clamp(12px, 1.7dvh, 15px); }
+.tv .results div small { font-size: clamp(10px, 1.4dvh, 12px); }
+@media (max-height: 600px) { .tv .cardtools .hint { display: none; } .tv .opp-tag { display: none; } }
