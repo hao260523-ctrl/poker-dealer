@@ -198,6 +198,7 @@
     if (kind === 'd.') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
     return JSON.parse(new TextDecoder().decode(bytes));
   }
+  const siteUrl = () => `${location.origin}${location.pathname}`;
   function handoffPayload() {
     const g = E.clone(state.game);
     if (g) { g.handLog = (g.handLog || []).slice(-30); if (g.hand) delete g.hand.actions; }
@@ -341,7 +342,7 @@
       ${gameCard}
       <button class="primary big" data-act="start">${t('ゲームを始める')}</button>
       <p class="hint" style="text-align:center">${t('画面は端末に自動保存されます。ブラウザを閉じても続きから再開できます。')}</p>
-      <button class="small ghost" style="margin:6px auto 0;display:block" data-act="sheet" data-type="restoreBackup">${t('バックアップ文字列から復元')}</button>
+      <div class="row" style="margin-top:6px"><button class="small ghost" data-act="shareSite">${t('このアプリのリンクを共有')}</button><button class="small ghost" data-act="sheet" data-type="restoreBackup">${t('バックアップ文字列から復元')}</button></div>
     </div>`;
   }
 
@@ -605,6 +606,7 @@
         <div class="row" style="margin-bottom:8px"><span style="flex:0 0 auto;color:var(--muted)">${t('言語')}${state.lang === 'ja' ? ' / 语言' : ''}</span>${langSeg()}</div>
         ${g.hand && g.hand.street !== 'done' ? `<button data-act="cancelHand">${t('このハンドを中止（ミスディール：チップを返す）')}</button>` : ''}
         <button data-act="sheet" data-type="history">${t('ハンド履歴・復元')} <small style="color:var(--muted)">（${t('{0} ハンド', (g.handLog || []).length)}）</small></button>
+        <button data-act="shareSite">${t('このアプリのリンクを共有')} <small style="color:var(--muted)">${esc(siteUrl())}</small></button>
         <button data-act="handoff">${t('別の携帯に引き継ぐ（リンク）')}</button>
         <button data-act="copyBackup">${t('バックアップ文字列をコピー')}</button>
         <button data-act="summary">${t('集計を見る')}</button>
@@ -714,6 +716,10 @@
       <p>${gg ? `${t(gg.mode === 'tournament' ? 'トーナメント' : 'キャッシュゲーム')} ・ ${t('{0} ハンド', gg.handNo)}<br><small style="color:var(--muted)">${names}</small>` : ''}</p>
       ${state.game ? `<p class="hint">${t('今のゲームは「前回のゲーム」として保管されます。')}</p>` : ''}
       <div class="row"><button data-act="closeSheet">${t('キャンセル')}</button><button class="primary" data-act="doImport">${t('読み込む')}</button></div>`;
+    } else if (s.type === 'showSite') {
+      body = `<h2>${t('このアプリのリンクを共有')} ${close}</h2>
+      <p class="hint" style="margin:0 0 8px">${t('下のリンクを選択してコピーしてください。')}</p>
+      <textarea readonly rows="2" class="backup" onclick="this.select()">${esc(s.url)}</textarea>`;
     } else if (s.type === 'showBackup') {
       body = `<h2>${t('バックアップ文字列をコピー')} ${close}</h2>
       <p class="hint" style="margin:0 0 8px">${t('下の文字列を全選択してコピーしてください。')}</p>
@@ -821,6 +827,15 @@
     // setup
     lang(d) { state.lang = d.v; save(); render(); },
     setCards(d) { state.setup.cards = d.v === '1'; save(); render(); },
+    async shareSite() {
+      const url = siteUrl();
+      const text = tt('ポーカーディーラー：ブラウザで動くポーカーのディーラーアプリ。トランプが無くても遊べます。');
+      if (navigator.share) {
+        try { await navigator.share({ title: tt('ポーカーディーラー'), text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+      }
+      try { await navigator.clipboard.writeText(url); toast('リンクをコピーしました'); }
+      catch (e) { ui.sheet = { type: 'showSite', url }; render(); }
+    },
     async handoff() {
       const url = `${location.origin}${location.pathname}#s=${await encodeState(handoffPayload())}`;
       ui.sheet = { type: 'handoff', url };
@@ -1173,6 +1188,7 @@
     cardHtml, cardsHtml, squeezeHtml, HAND_JA, STREET_JA, ANTE_JA,
     renderModeCard, renderCardsCard, renderGameCard, defaultBuyIn, requestWakeLock, requestPersistentStorage, vibrate,
     startGameConfig: () => buildGameConfig(),
+    siteUrl,
   };
 
   render();

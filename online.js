@@ -708,6 +708,7 @@
     return `<h2>${t('メニュー')} ${close}</h2>
       <div class="menu">
         <button data-act="olRoomInfo">${t('ルーム情報・招待')} <small style="color:var(--muted)">${o.room}</small></button>
+        <button data-act="shareSite">${t('このアプリのリンクを共有')} <small style="color:var(--muted)">${esc(A.siteUrl())}</small></button>
         <div class="row" style="margin-bottom:8px"><span style="flex:0 0 auto;color:var(--muted)">${t('言語')}${st().lang === 'ja' ? ' / 语言' : ''}</span>${A.langSeg()}</div>
         ${g && g.mode === 'cash' ? `<button data-act="olRebuy">${t('チップを追加（リバイ）')}</button>` : ''}
         ${g ? `<button data-act="olSitout">${E.byId(g, myPid()) && E.byId(g, myPid()).sitOut ? t('席に戻る') : t('一時離席（次のハンドから飛ばす）')}</button>` : ''}
