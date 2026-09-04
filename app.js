@@ -562,10 +562,10 @@
         <div class="who">${t('{0} の番', `<b>${esc(p.name)}</b>`)}<span>${info}</span></div>
         ${peek}
         <div class="actions">
-          <button class="big" data-act="fold">${t('フォールド')}</button>
-          <button class="big blue" data-act="${la.canCheck ? 'check' : 'call'}">${callLabel}</button>
-          <button class="big" data-act="raiseOpen" ${la.canRaise ? '' : 'disabled'}>${t(raiseWord)}</button>
-          <button class="big danger" data-act="allin" ${la.stack > 0 && (la.canRaise || la.callIsAllIn) ? '' : 'disabled'}>${t('オールイン {0}', fmt(la.maxRaiseTo))}</button>
+          <button class="big blue" data-act="fold">${t('フォールド')}</button>
+          <button class="big green" data-act="${la.canCheck ? 'check' : 'call'}">${callLabel}</button>
+          <button class="big danger" data-act="raiseOpen" ${la.canRaise ? '' : 'disabled'}>${t(raiseWord)}</button>
+          <button class="big purple" data-act="allin" ${la.stack > 0 && (la.canRaise || la.callIsAllIn) ? '' : 'disabled'}>${t('オールイン {0}', fmt(la.maxRaiseTo))}</button>
         </div>
       </div>`;
     }
@@ -698,7 +698,7 @@
         <input type="number" inputmode="numeric" id="raise-input" value="${to}">
         <button data-act="raiseDelta" data-v="${bb}">＋${fmt(bb)}</button>
       </div>
-      <button class="${to >= la.maxRaiseTo ? 'danger' : 'primary'} big" style="width:100%" data-act="raiseConfirm">${raiseConfirmLabel(to, la)}</button>`;
+      <button class="${to >= la.maxRaiseTo ? 'purple' : 'primary'} big" style="width:100%" data-act="raiseConfirm">${raiseConfirmLabel(to, la)}</button>`;
     } else if (s.type === 'history') {
       const log = (g.handLog || []).slice().reverse();
       const rows = log.map((r) => {
@@ -747,7 +747,7 @@
     } else if (s.type === 'confirm') {
       body = `<h2>${t(s.title)} ${close}</h2>
       <p>${t(s.text, ...(s.args || []))}</p>
-      <div class="row"><button data-act="closeSheet">${t('キャンセル')}</button><button class="danger" data-act="${s.act}">${t(s.ok)}</button></div>`;
+      <div class="row"><button data-act="closeSheet">${t('キャンセル')}</button><button class="${s.act === 'allinConfirm' ? 'purple' : 'danger'}" data-act="${s.act}">${t(s.ok)}</button></div>`;
     }
     return `<div class="overlay" data-act="overlay"><div class="sheet">${body}</div></div>`;
   }
@@ -779,7 +779,7 @@
     if (inp && document.activeElement !== inp && Number(inp.value) !== to) inp.value = to;
     const btn = document.querySelector('[data-act="raiseConfirm"]');
     if (btn) {
-      btn.className = (to >= la.maxRaiseTo ? 'danger' : 'primary') + ' big';
+      btn.className = (to >= la.maxRaiseTo ? 'purple' : 'primary') + ' big';
       btn.innerHTML = raiseConfirmLabel(to, la);
     }
   }

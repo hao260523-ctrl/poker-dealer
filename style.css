@@ -51,6 +51,7 @@ button.primary { background: var(--gold); color: #1f1a05; border-color: transpar
 button.danger { background: var(--red); border-color: transparent; font-weight: 700; }
 button.blue { background: var(--blue); border-color: transparent; font-weight: 700; }
 button.green { background: var(--green); color: #05230f; border-color: transparent; font-weight: 700; }
+button.purple { background: #8e44ad; border-color: transparent; font-weight: 700; }
 button.ghost { background: transparent; }
 button.small { min-height: 36px; padding: 6px 12px; font-size: 14px; border-radius: 10px; }
 button.big { min-height: 64px; font-size: 20px; font-weight: 700; }
