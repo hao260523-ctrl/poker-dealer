@@ -684,7 +684,7 @@
       const raiseWord = la.currentBet === 0 ? 'ベット' : 'レイズ';
       act = `${proxyTurn ? `<div class="msg">${t('{0} の代理で操作中', esc(p.name))} <button class="small ghost" data-act="olProxy" data-id="${p.id}">✕</button></div>` : `<div class="who"><b>${t('あなたの番')}</b><span>${la.currentBet > 0 ? t('現在のベット {0}', fmt(la.currentBet)) + ' ・ ' : ''}${la.canRaise ? t('最低{0} {1}', A.pair(raiseWord), fmt(la.minRaiseTo)) : ''}</span></div>`}
         <div class="actions">
-          <button class="big blue" data-act="fold">${t('フォールド')}</button>
+          <button class="big blue ${la.canCheck ? 'dim' : ''}" data-act="fold">${t('フォールド')}</button>
           <button class="big green" data-act="${la.canCheck ? 'check' : 'call'}">${callLabel}</button>
           <button class="big danger" data-act="raiseOpen" ${la.canRaise ? '' : 'disabled'}>${t(raiseWord)}</button>
           <button class="big purple" data-act="allin" ${la.stack > 0 && (la.canRaise || la.callIsAllIn) ? '' : 'disabled'}>${t('オールイン {0}', fmt(la.maxRaiseTo))}</button>

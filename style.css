@@ -53,6 +53,7 @@ button.blue { background: var(--blue); border-color: transparent; font-weight: 7
 button.green { background: var(--green); color: #05230f; border-color: transparent; font-weight: 700; }
 button.purple { background: #8e44ad; border-color: transparent; font-weight: 700; }
 button.ghost { background: transparent; }
+button.dim { opacity: 0.38; }
 button.small { min-height: 36px; padding: 6px 12px; font-size: 14px; border-radius: 10px; }
 button.big { min-height: 64px; font-size: 20px; font-weight: 700; }
 button.icon { width: 44px; min-height: 44px; padding: 0; font-size: 20px; display: inline-flex; align-items: center; justify-content: center; }
