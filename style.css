@@ -223,3 +223,27 @@ input[type="range"] { width: 100%; accent-color: var(--gold); height: 40px; }
 .hist-stacks { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
 .card.archive { border-color: rgba(245, 197, 66, 0.4); }
 textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px; font-family: monospace; }
+
+/* ---- cards ---- */
+.card.slot, .card.back, .card b, .card i { }
+.card { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; background: #fdfdf8; color: #111; border-radius: 6px; font-weight: 800; line-height: 1; box-shadow: 0 1px 3px rgba(0,0,0,.4); vertical-align: middle; }
+.card.red { color: #d3242b; }
+.card.sm { width: 26px; height: 36px; font-size: 13px; border-radius: 4px; }
+.card.sm i { font-size: 11px; }
+.card.md { width: 44px; height: 62px; font-size: 20px; }
+.card.md i { font-size: 16px; }
+.card.lg { width: 84px; height: 118px; font-size: 40px; border-radius: 10px; }
+.card.lg i { font-size: 32px; }
+.card i { font-style: normal; }
+.card.back { background: repeating-linear-gradient(45deg, #3b6ea5 0 4px, #2f5b8a 4px 8px); border: 2px solid #e8eef5; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.card.slot { background: rgba(255,255,255,.06); border: 1px dashed rgba(255,255,255,.25); box-shadow: none; }
+.board { display: flex; gap: 6px; justify-content: center; margin: 8px 0 2px; }
+.pl .mini { display: flex; align-items: center; gap: 3px; margin-top: 6px; flex-wrap: wrap; }
+.pl .mini .handname { font-size: 11px; color: var(--gold); font-weight: 700; margin-left: 4px; }
+.cards-inline { display: inline-flex; gap: 3px; vertical-align: middle; margin: 0 4px; }
+.results div.win { background: rgba(53, 194, 107, 0.12); border-radius: 8px; }
+.results div small { color: var(--muted); font-size: 12px; }
+.peekwrap { position: relative; margin: 4px 0 10px; }
+.peek { width: 100%; min-height: 56px; font-size: 17px; font-weight: 700; background: #2b2f5a; border-color: rgba(255,255,255,.2); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hole { display: none; justify-content: center; gap: 10px; padding: 10px 0 12px; }
+.hole.show { display: flex; }

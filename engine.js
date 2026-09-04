@@ -9,6 +9,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
+  const Cards = (typeof module === 'object' && module.exports) ? require('./cards.js') : self.PokerCards;
   const STREETS = ['preflop', 'flop', 'turn', 'river', 'showdown', 'done'];
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -32,6 +33,7 @@
     const g = {
       version: 1,
       mode: cfg.mode === 'tournament' ? 'tournament' : 'cash',
+      cards: !!cfg.cards, // deal virtual cards and decide showdowns automatically
       players,
       blinds: {
         sb: cfg.sb,
@@ -203,6 +205,13 @@
       result: null,
       runout: false,
     };
+    if (g.cards) {
+      const deck = Cards.shuffle(Cards.newDeck(), g._rng || undefined);
+      h.hole = {};
+      for (const id of ids) h.hole[id] = [deck.pop(), deck.pop()];
+      h.board = [];
+      h.deck = deck;
+    }
     const headsUp = ids.length === 2;
     if (headsUp) {
       h.sbId = h.dealerId;
@@ -231,6 +240,21 @@
     h.actions.push({ type: 'start', dealer: h.dealerId, sb: h.sbId, bb: h.bbId });
     checkRoundEnd(g, h, null);
     return h;
+  }
+
+  function dealBoard(h, count) {
+    while (count-- > 0 && h.deck.length) h.board.push(h.deck.pop());
+  }
+
+  /** Cards mode: evaluate every contender's 7 cards. */
+  function evaluateHands(g) {
+    const h = g.hand;
+    const out = {};
+    for (const id of inHandIds(h)) {
+      const ev = Cards.evaluate([...h.hole[id], ...h.board]);
+      out[id] = { cards: h.hole[id], name: ev.name, best: ev.best, score: ev.score };
+    }
+    return out;
   }
 
   function firstToActAfter(g, h, fromIdx) {
@@ -362,6 +386,22 @@
       h.runout = h.street !== 'river' && active.length <= 1;
       h.street = 'showdown';
       const pots = computePots(g);
+      if (g.cards) {
+        dealBoard(h, 5 - h.board.length);
+        const hands = evaluateHands(g);
+        const awarded = pots.map((pt) => {
+          let top = -1, ws = [];
+          for (const id of pt.eligible) {
+            const sc = hands[id].score;
+            if (sc > top) { top = sc; ws = [id]; } else if (sc === top) ws.push(id);
+          }
+          return { ...pt, winners: ws };
+        });
+        finishHand(g, h, awarded);
+        h.result.hands = hands;
+        h.result.showdown = true;
+        return;
+      }
       // auto-award when nobody needs to choose (only one eligible in every pot)
       if (pots.every((pt) => pt.eligible.length === 1)) {
         finishHand(g, h, pots.map((pt) => ({ ...pt, winners: pt.eligible })));
@@ -369,6 +409,7 @@
       return;
     }
     h.street = STREETS[idx + 1];
+    if (g.cards) dealBoard(h, h.street === 'flop' ? 3 : 1);
     h.needToAct = active;
     h.toAct = firstToActAfter(g, h, idxOf(g, h.dealerId));
   }
@@ -516,7 +557,7 @@
 
   return {
     STREETS, clone, defaultLevels, createGame, applyLevel, setLevel, tickTimer, startTimer, pauseTimer,
-    byId, idxOf, eligiblePlayers, canStartHand, startHand, legalActions, act, computePots, awardPots, endHand, cancelHand, restoreToHand,
+    byId, idxOf, eligiblePlayers, canStartHand, startHand, legalActions, act, computePots, awardPots, endHand, cancelHand, restoreToHand, evaluateHands,
     addChips, addPlayer, setBlinds, summary, totalPot, inHandIds, activeIds,
   };
 });

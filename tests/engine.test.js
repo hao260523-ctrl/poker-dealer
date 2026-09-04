@@ -244,3 +244,46 @@ test('hand log records each hand and restoreToHand rolls stacks back', () => {
   assert.equal(h.no, 2);
   assert.equal(h.dealerId, 2); // button continues from hand 1's dealer (P1)
 });
+
+test('cards mode: deals hole cards and board, decides showdown automatically', () => {
+  const g = game([100, 100, 100], { cards: true });
+  g._rng = () => 0; // deterministic
+  const h = E.startHand(g);
+  assert.equal(Object.keys(h.hole).length, 3);
+  assert.equal(h.deck.length, 52 - 6);
+  assert.deepEqual(h.board, []);
+  E.act(g, 'call'); E.act(g, 'call'); E.act(g, 'check');
+  assert.equal(h.street, 'flop');
+  assert.equal(h.board.length, 3);
+  E.act(g, 'check'); E.act(g, 'check'); E.act(g, 'check');
+  assert.equal(h.board.length, 4);
+  E.act(g, 'check'); E.act(g, 'check'); E.act(g, 'check');
+  assert.equal(h.board.length, 5);
+  E.act(g, 'check'); E.act(g, 'check'); E.act(g, 'check');
+  assert.equal(h.street, 'done');
+  assert.ok(h.result.showdown);
+  assert.equal(Object.keys(h.result.hands).length, 3);
+  assert.equal(g.players.reduce((s, p) => s + p.stack, 0), 300);
+  assert.equal(Object.values(h.result.won).reduce((a, b) => a + b, 0), 6);
+});
+
+test('cards mode: all-in runout fills the board and awards by hand strength', () => {
+  const g = game([50, 100, 100], { cards: true });
+  g._rng = (n) => n - 1;
+  const h = E.startHand(g);
+  E.act(g, 'allin'); E.act(g, 'allin'); E.act(g, 'call');
+  assert.equal(h.street, 'done');
+  assert.equal(h.board.length, 5);
+  assert.equal(h.runout, true);
+  assert.equal(g.players.reduce((s, p) => s + p.stack, 0), 250);
+  assert.ok(h.result.pots.length >= 1);
+});
+
+test('cards mode: fold-out awards without revealing', () => {
+  const g = game([100, 100], { cards: true });
+  const h = E.startHand(g);
+  E.act(g, 'fold');
+  assert.equal(h.street, 'done');
+  assert.equal(h.result.showdown, undefined);
+  assert.deepEqual(stacks(g), [99, 101]);
+});

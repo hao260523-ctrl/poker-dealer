@@ -12,6 +12,7 @@
   function defaultSetup() {
     return {
       mode: 'cash',
+      cards: false,
       count: 4,
       names: ['', '', '', '', '', '', '', '', '', ''],
       startStack: 1000,
@@ -159,6 +160,39 @@
   const STREET_JA = { preflop: 'プリフロップ', flop: 'フロップ', turn: 'ターン', river: 'リバー', showdown: 'ショーダウン', done: 'ハンド終了' };
   const ANTE_JA = { bb: 'BBアンテ', all: '全員アンテ', none: 'アンテなし' };
   const street = (s) => t(STREET_JA[s]);
+  const HAND_JA = { high_card: 'ハイカード', pair: 'ワンペア', two_pair: 'ツーペア', three_kind: 'スリーカード', straight: 'ストレート', flush: 'フラッシュ', full_house: 'フルハウス', four_kind: 'フォーカード', straight_flush: 'ストレートフラッシュ' };
+  const SUIT_SYM = { s: '♠', h: '♥', d: '♦', c: '♣' };
+  function cardHtml(c, cls = '') {
+    if (!c) return `<span class="card back ${cls}"></span>`;
+    const r = c[0] === 'T' ? '10' : c[0];
+    return `<span class="card ${c[1] === 'h' || c[1] === 'd' ? 'red' : ''} ${cls}"><b>${r}</b><i>${SUIT_SYM[c[1]]}</i></span>`;
+  }
+  const cardsHtml = (arr, cls = '') => (arr || []).map((c) => cardHtml(c, cls)).join('');
+  const b64u = {
+    enc: (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+    dec: (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)),
+  };
+  async function encodeState(obj) {
+    const json = new TextEncoder().encode(JSON.stringify(obj));
+    if (typeof CompressionStream === 'function') {
+      try {
+        const ab = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
+        return 'd.' + b64u.enc(new Uint8Array(ab));
+      } catch (e) { /* fall through */ }
+    }
+    return 'j.' + b64u.enc(json);
+  }
+  async function decodeState(str) {
+    const kind = str.slice(0, 2);
+    let bytes = b64u.dec(str.slice(2));
+    if (kind === 'd.') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+  function handoffPayload() {
+    const g = E.clone(state.game);
+    if (g) { g.handLog = (g.handLog || []).slice(-30); if (g.hand) delete g.hand.actions; }
+    return { v: 1, game: g, lang: state.lang, at: Date.now() };
+  }
 
   let toastTimer = null;
   /** msg is a Japanese template; args must be HTML-safe. */
@@ -323,6 +357,14 @@
         </div>
       </div>
       <div class="card">
+        <h3>${t('カード')}</h3>
+        <div class="seg">
+          <button data-act="setCards" data-v="0" class="${!s.cards ? 'on' : ''}">${t('トランプを使う')}</button>
+          <button data-act="setCards" data-v="1" class="${s.cards ? 'on' : ''}">${t('アプリが配る')}</button>
+        </div>
+        <p class="hint">${t(s.cards ? 'アプリがカードを配り、役の判定と配分も自動で行います。自分の手札は手番のときに「手札を見る」を長押しして確認します。' : 'カードは実物のトランプで配ります。アプリはチップと手番だけを管理し、勝者はタップで選びます。')}</p>
+      </div>
+      <div class="card">
         <h3>${t('プレイヤー')}</h3>
         <div class="row" style="margin-bottom:10px">
           <label style="flex:1;color:var(--muted)">${t('人数')}</label>
@@ -370,9 +412,11 @@
     if (h) {
       const total = E.totalPot(h);
       const streetBets = Object.values(h.bets).reduce((a, b) => a + b, 0);
+      const board = g.cards ? `<div class="board">${cardsHtml(h.board, 'md')}${'<span class="card slot md"></span>'.repeat(Math.max(0, 5 - (h.board || []).length))}</div>` : '';
       pot = `<div class="potbox">
         <div class="street">${street(h.street)}</div>
         <div class="pot"><small>POT</small>${fmt(total)}</div>
+        ${board}
         ${streetBets > 0 && h.street !== 'done' ? `<div class="sub">${t('前のストリートまで {0} ＋ 今のベット {1}', fmt(total - streetBets), fmt(streetBets))}</div>` : ''}
       </div>`;
     } else {
@@ -397,11 +441,16 @@
       } else if (h && !h.inHandIds.includes(p.id)) { cls.push('out'); tag = `<span class="tag sit">${t('不参加')}</span>`; }
       else if (p.stack === 0) { tag = `<span class="tag sit">${t('チップ 0')}</span>`; }
       const bet = h && h.bets[p.id] && h.street !== 'done' ? `<div class="bet">${fmt(h.bets[p.id])}</div>` : '';
+      let mini = '';
+      if (g.cards && h && h.inHandIds.includes(p.id) && !h.folded[p.id]) {
+        const shown = h.street === 'done' && h.result && h.result.hands && h.result.hands[p.id];
+        mini = `<div class="mini">${shown ? cardsHtml(shown.cards, 'sm') : cardHtml(null, 'sm') + cardHtml(null, 'sm')}${shown ? `<span class="handname">${t(HAND_JA[shown.name])}</span>` : ''}</div>`;
+      }
       return `<div class="${cls.join(' ')}" data-act="player" data-id="${p.id}">
         <div class="pos">${pos.join('')}</div>
         <div class="name">${esc(p.name)}</div>
         <div class="stack">${fmt(p.stack)}</div>
-        ${tag}${bet}
+        ${tag}${mini}${bet}
       </div>`;
     }).join('');
 
@@ -422,9 +471,12 @@
       }
     } else if (h.street === 'done') {
       const r = h.result;
+      const rows = r.hands
+        ? Object.keys(r.hands).sort((x, y) => r.hands[y].score - r.hands[x].score).map((id) => `<div class="${r.won[id] ? 'win' : ''}"><span>${esc(E.byId(g, Number(id)).name)} <span class="cards-inline">${cardsHtml(r.hands[id].cards, 'sm')}</span> <small>${t(HAND_JA[r.hands[id].name])}</small></span><b>${r.won[id] ? '＋' + fmt(r.won[id]) : ''}</b></div>`).join('')
+        : Object.keys(r.won).map((id) => `<div><span>${esc(E.byId(g, Number(id)).name)}</span><b>＋${fmt(r.won[id])}</b></div>`).join('');
       panel = `<div class="panel">
-        <div class="msg big">${t('ハンド終了')}</div>
-        <div class="results">${Object.keys(r.won).map((id) => `<div><span>${esc(E.byId(g, Number(id)).name)}</span><b>＋${fmt(r.won[id])}</b></div>`).join('')}</div>
+        <div class="msg big">${t(r.showdown ? 'ショーダウン' : 'ハンド終了')}</div>
+        <div class="results">${rows}</div>
         <button class="primary big" style="width:100%" data-act="nextHand">${t('次のハンドへ ▶')}</button>
       </div>`;
     } else if (h.street === 'showdown') {
@@ -455,8 +507,10 @@
       else if (la.currentBet > 0) info = t('スタック {0} ・ 現在のベット {1}', fmt(la.stack), fmt(la.currentBet));
       else if (la.canRaise) info = t('スタック {0} ・ 最低{1} {2}', fmt(la.stack), pair(raiseWord), fmt(la.minRaiseTo));
       else info = t('スタック {0}', fmt(la.stack));
+      const peek = g.cards ? `<div class="peekwrap"><div class="hole" id="hole-view"></div><button class="peek" data-peek="${p.id}">👁 ${t('手札を見る（長押し）')}</button></div>` : '';
       panel = `<div class="panel">
         <div class="who">${t('{0} の番', `<b>${esc(p.name)}</b>`)}<span>${info}</span></div>
+        ${peek}
         <div class="actions">
           <button class="big" data-act="fold">${t('フォールド')}</button>
           <button class="big blue" data-act="${la.canCheck ? 'check' : 'call'}">${callLabel}</button>
@@ -514,6 +568,7 @@
         <div class="row" style="margin-bottom:8px"><span style="flex:0 0 auto;color:var(--muted)">${t('言語')}${state.lang === 'ja' ? ' / 语言' : ''}</span>${langSeg()}</div>
         ${g.hand && g.hand.street !== 'done' ? `<button data-act="cancelHand">${t('このハンドを中止（ミスディール：チップを返す）')}</button>` : ''}
         <button data-act="sheet" data-type="history">${t('ハンド履歴・復元')} <small style="color:var(--muted)">（${t('{0} ハンド', (g.handLog || []).length)}）</small></button>
+        <button data-act="handoff">${t('別の携帯に引き継ぐ（リンク）')}</button>
         <button data-act="copyBackup">${t('バックアップ文字列をコピー')}</button>
         <button data-act="summary">${t('集計を見る')}</button>
         <button class="danger" data-act="newGameConfirm">${t('ゲームを終了して新規作成')}</button>
@@ -553,8 +608,10 @@
       const h = g.hand;
       const inLiveHand = h && h.street !== 'done' && h.inHandIds.includes(p.id) && !h.folded[p.id];
       const idx = E.idxOf(g, p.id);
+      const canPeek = g.cards && h && h.street !== 'done' && h.hole && h.hole[p.id] && h.inHandIds.includes(p.id) && !h.folded[p.id];
       body = `<h2>${esc(p.name)} ${close}</h2>
       <div class="row" style="margin-bottom:12px"><div>${t('スタック {0}', `<b style="font-size:22px">${fmt(p.stack)}</b>`)}</div><div style="text-align:right;color:var(--muted)">${t('持込合計 {0}', fmt(p.buyIn))}</div></div>
+      ${canPeek ? `<div class="peekwrap" style="margin-bottom:12px"><div class="hole" id="hole-view"></div><button class="peek" data-peek="${p.id}">👁 ${t('手札を見る（長押し）')}</button></div>` : ''}
       ${inLiveHand ? `<p class="hint">${t('ハンド中のプレイヤーはチップ操作できません。ハンド終了後に行ってください。')}</p>` : `
       <div class="field"><label>${t('チップ追加（リバイ／アドオン）')}</label>
         <div class="pm"><button data-act="pm" data-target="#chip-amt" data-v="-100">－</button><input type="number" inputmode="numeric" id="chip-amt" value="${s.defaultStack}"><button data-act="pm" data-target="#chip-amt" data-v="100">＋</button></div>
@@ -604,6 +661,22 @@
       body = `<h2>${t('ハンド履歴・復元')} ${close}</h2>
       <p class="hint" style="margin:0 0 10px">${t('各ハンド終了直後のスタックです。「ここに戻す」でその時点からやり直せます（進行中のハンドは中止されます）。')}</p>
       ${rows || `<p class="hint">${t('まだ終了したハンドがありません。')}</p>`}`;
+    } else if (s.type === 'handoff') {
+      body = `<h2>${t('別の携帯に引き継ぐ（リンク）')} ${close}</h2>
+      <p class="hint" style="margin:0 0 10px">${t('このリンクを LINE などで送ると、開いた携帯で今のゲームを続きから再開できます（進行中のハンドの手札も含みます）。')}</p>
+      <div class="row" style="margin-bottom:10px">
+        ${navigator.share ? `<button class="primary" data-act="shareHandoff">${t('共有する')}</button>` : ''}
+        <button data-act="copyHandoff">${t('リンクをコピー')}</button>
+      </div>
+      <textarea readonly rows="4" class="backup" onclick="this.select()">${esc(s.url)}</textarea>
+      <p class="hint">${t('リンクの長さ: {0} 文字', s.url.length)}</p>`;
+    } else if (s.type === 'importConfirm') {
+      const gg = s.payload.game;
+      const names = gg ? gg.players.map((p) => esc(p.name)).join(', ') : '';
+      body = `<h2>${t('引き継ぎデータを読み込む')} ${close}</h2>
+      <p>${gg ? `${t(gg.mode === 'tournament' ? 'トーナメント' : 'キャッシュゲーム')} ・ ${t('{0} ハンド', gg.handNo)}<br><small style="color:var(--muted)">${names}</small>` : ''}</p>
+      ${state.game ? `<p class="hint">${t('今のゲームは「前回のゲーム」として保管されます。')}</p>` : ''}
+      <div class="row"><button data-act="closeSheet">${t('キャンセル')}</button><button class="primary" data-act="doImport">${t('読み込む')}</button></div>`;
     } else if (s.type === 'showBackup') {
       body = `<h2>${t('バックアップ文字列をコピー')} ${close}</h2>
       <p class="hint" style="margin:0 0 8px">${t('下の文字列を全選択してコピーしてください。')}</p>
@@ -669,7 +742,7 @@
     if (tour && s.levels.some((l) => !(l.bb > 0 && l.sb > 0 && l.minutes > 0))) return toast('ブラインド構成に不正な値があります');
     const players = Array.from({ length: s.count }, (_, i) => ({ name: s.names[i], stack }));
     const cfg = {
-      mode: s.mode, players,
+      mode: s.mode, players, cards: !!s.cards,
       sb: s.sb, bb: s.bb, anteMode: s.anteMode, ante: s.anteMode === 'none' ? 0 : s.ante,
     };
     if (tour) {
@@ -700,6 +773,29 @@
   const actions = {
     // setup
     lang(d) { state.lang = d.v; save(); render(); },
+    setCards(d) { state.setup.cards = d.v === '1'; save(); render(); },
+    async handoff() {
+      const url = `${location.origin}${location.pathname}#s=${await encodeState(handoffPayload())}`;
+      ui.sheet = { type: 'handoff', url };
+      render();
+    },
+    async shareHandoff() {
+      try { await navigator.share({ title: tt('ポーカーディーラー'), text: tt('ポーカーの続きはこちら'), url: ui.sheet.url }); } catch (e) { /* cancelled */ }
+    },
+    async copyHandoff() {
+      try { await navigator.clipboard.writeText(ui.sheet.url); toast('リンクをコピーしました'); } catch (e) { toast('コピーできませんでした。下の文字列を選択してコピーしてください。'); }
+    },
+    doImport() {
+      const p = ui.sheet.payload;
+      ui.sheet = null;
+      if (state.game) state.archive = { game: state.game, endedAt: Date.now() };
+      state.game = p.game;
+      state.history = [];
+      state.screen = 'table';
+      if (p.lang) state.lang = p.lang;
+      save(); render(); requestWakeLock();
+      toast('引き継ぎました');
+    },
     set(d) {
       const s = state.setup;
       s[d.field] = d.v;
@@ -947,6 +1043,44 @@
     if (el.dataset.field === 'levelMinutes' || (el.dataset.field === 'bb' && state.setup.anteMode === 'bb')) render();
   });
 
+  // ---------- peek (press and hold to see own hole cards) ----------
+  function showHole(id) {
+    const g = state.game;
+    const h = g && g.hand;
+    const el = document.getElementById('hole-view');
+    if (!el || !h || !h.hole || !h.hole[id]) return;
+    el.innerHTML = cardsHtml(h.hole[id], 'lg');
+    el.classList.add('show');
+  }
+  function hideHole() {
+    const el = document.getElementById('hole-view');
+    if (el) { el.classList.remove('show'); el.innerHTML = ''; }
+  }
+  $app.addEventListener('pointerdown', (ev) => {
+    const b = ev.target.closest('[data-peek]');
+    if (!b) return;
+    ev.preventDefault();
+    try { b.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+    showHole(Number(b.dataset.peek));
+  });
+  ['pointerup', 'pointercancel'].forEach((n) => $app.addEventListener(n, (ev) => { if (ev.target.closest('[data-peek]')) hideHole(); }));
+  $app.addEventListener('contextmenu', (ev) => { if (ev.target.closest('[data-peek]')) ev.preventDefault(); });
+  window.addEventListener('blur', hideHole);
+
+  async function checkHashImport() {
+    const m = location.hash.match(/^#s=([A-Za-z0-9._-]+)$/);
+    if (!m) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      const payload = await decodeState(m[1]);
+      if (!payload || !payload.game || !Array.isArray(payload.game.players)) throw new Error('bad');
+      ui.sheet = { type: 'importConfirm', payload };
+      render();
+    } catch (e) {
+      toast('引き継ぎリンクを読み取れませんでした');
+    }
+  }
+
   // ---------- timer loop ----------
   setInterval(() => {
     const g = state.game;
@@ -985,5 +1119,6 @@
   render();
   renderSaveBanner();
   if (state.screen === 'table') requestWakeLock();
-  recoverFromIdb();
+  recoverFromIdb().then(checkHashImport);
+  window.addEventListener('hashchange', checkHashImport);
 })();
