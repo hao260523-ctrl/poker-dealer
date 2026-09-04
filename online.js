@@ -652,7 +652,7 @@
     let cardsArea = '';
     if (g.cards && myHole && meIn) {
       cardsArea = `<div class="mycards" data-mycards>${myHole.map((c) => A.squeezeHtml(c, up || showAll)).join('')}<div class="foldhint" hidden>${t('もう一度上にスワイプでフォールド')}</div></div>
-        <div class="cardtools"><button class="small ghost" data-act="olCardsUp">${up ? t('伏せる') : t('表にする')}</button><span class="hint">${t('長押しで絞る ・ 上に2回スワイプでフォールド')}</span></div>`;
+        <div class="cardtools"><button class="small ghost" data-act="olCardsUp">${up ? t('伏せる') : t('表にする')}</button><span class="hint">${t('長押しで見る ・ 上に2回スワイプでフォールド')}</span></div>`;
     } else if (h && h.inHandIds.includes(me) && h.folded[me]) {
       cardsArea = `<div class="mycards folded"><div class="sq off"></div><div class="sq off"></div></div><div class="cardtools"><span class="hint">${t('フォールドしました')}</span></div>`;
     }

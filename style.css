@@ -259,8 +259,14 @@ textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25);
 .sq-face .ix.tl { top: 6px; left: 8px; }
 .sq-face .ix.br { bottom: 6px; right: 8px; transform: rotate(180deg); }
 .sq-face .pip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 48px; opacity: .85; }
-.sq-back { background: #1f4fa3 repeating-linear-gradient(45deg, rgba(255,255,255,.14) 0 6px, transparent 6px 12px); border: 5px solid #f4f4ee; box-sizing: border-box; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); transition: clip-path .85s cubic-bezier(.2,.8,.2,1), opacity .4s ease; }
-.sq.peel .sq-back { clip-path: polygon(0 66%, 56% 0, 100% 0, 100% 100%, 0 100%); }
+.sq-back { background: #1f4fa3 repeating-linear-gradient(45deg, rgba(255,255,255,.14) 0 6px, transparent 6px 12px); border: 5px solid #f4f4ee; box-sizing: border-box; clip-path: polygon(0 0, 0 0, 100% 0, 100% 100%, 0 100%); transition: opacity .4s ease; }
+/* hold: peel from the top-left corner (index first), then the whole face; release: covered again */
+.sq.peel .sq-back { animation: peel 1.15s cubic-bezier(.3,.1,.3,1) forwards; }
+@keyframes peel {
+  0%   { clip-path: polygon(0 0, 0 0, 100% 0, 100% 100%, 0 100%); }
+  40%  { clip-path: polygon(0 62%, 52% 0, 100% 0, 100% 100%, 0 100%); }
+  100% { clip-path: polygon(100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%); }
+}
 .sq.up .sq-back { opacity: 0; clip-path: polygon(100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%); }
 .sq.off { background: rgba(255,255,255,.08); border: 1px dashed rgba(255,255,255,.25); box-shadow: none; }
 .hole .sq { width: 84px; height: 118px; }
