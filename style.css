@@ -202,3 +202,15 @@ input[type="range"] { width: 100%; accent-color: var(--gold); height: 40px; }
 @media (min-width: 480px) {
   .players { grid-template-columns: 1fr 1fr 1fr; }
 }
+
+/* ---- bilingual (Chinese mode: Chinese on top, small faint Japanese below) ---- */
+.bi { display: inline-block; vertical-align: middle; line-height: 1.15; }
+.bi .zh { display: block; }
+.bi .ja { display: block; font-size: max(0.58em, 10px); font-weight: 500; opacity: 0.6; letter-spacing: 0; }
+.lang-zh .pl .tag .bi .ja { font-size: 9px; }
+.lang-zh button.big { min-height: 72px; }
+.lang-zh .actions button.big { padding: 8px 10px; }
+.lang-zh .sheet .menu button { min-height: 60px; }
+.lang-zh .potbox .street .bi .ja { opacity: 0.5; }
+.lang-zh .topbar .info span .bi { vertical-align: top; }
+.seg.lang button { font-weight: 700; }

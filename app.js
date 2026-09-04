@@ -2,6 +2,7 @@
 (() => {
   'use strict';
   const E = window.PokerEngine;
+  const DICT = window.POKER_I18N || {};
   const KEY = 'pokerDealer.v1';
   const MAX_HISTORY = 40;
   const $app = document.getElementById('app');
@@ -26,9 +27,10 @@
     };
   }
 
-  let state = load() || { screen: 'setup', game: null, history: [], setup: defaultSetup(), flip: false };
+  let state = load() || { screen: 'setup', game: null, history: [], setup: defaultSetup(), flip: false, lang: 'ja' };
   if (!state.setup) state.setup = defaultSetup();
-  const ui = { sheet: null, showdown: {}, raiseTo: null, editName: '' };
+  if (!state.lang) state.lang = 'ja';
+  const ui = { sheet: null, showdown: {}, raiseTo: null };
 
   function load() {
     try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; }
@@ -37,19 +39,65 @@
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
   }
 
+  // ---------- i18n ----------
+  /** args may be strings or {ja, zh} pairs (see pair()); `which` picks the side for bilingual output. */
+  const fill = (tpl, args, which = 'ja') => tpl.replace(/\{(\d+)\}/g, (_, i) => {
+    const a = args[i];
+    if (a == null) return '';
+    return typeof a === 'object' ? a[which] : a;
+  });
+
+  /** Find the translation for a Japanese template (exact, or with numbers normalised to placeholders). */
+  function lookup(ja) {
+    const d = DICT[state.lang];
+    if (!d) return null;
+    if (d[ja]) return { ja, zh: d[ja], args: [] };
+    // engine messages arrive with numbers already filled in
+    const nums = [];
+    const norm = ja.replace(/\d[\d,]*/g, (m) => { nums.push(m); return `{${nums.length - 1}}`; });
+    if (d[norm]) return { ja: norm, zh: d[norm], args: nums };
+    return null;
+  }
+
+  /** HTML: Japanese, or stacked Chinese + small Japanese in zh mode. args must already be HTML-safe. */
+  function t(ja, ...args) {
+    if (state.lang === 'ja') return fill(ja, args);
+    const hit = lookup(ja);
+    if (!hit) return fill(ja, args);
+    const a = hit.args.length ? hit.args : args;
+    return `<span class="bi"><span class="zh">${fill(hit.zh, a, 'zh')}</span><span class="ja">${fill(hit.ja, a, 'ja')}</span></span>`;
+  }
+
+  /** A word that must be translated on each side of a bilingual template. */
+  function pair(ja) {
+    const hit = lookup(ja);
+    return { ja, zh: hit ? hit.zh : ja };
+  }
+
+  /** Plain text (attributes, document.title). */
+  function tt(ja, ...args) {
+    if (state.lang === 'ja') return fill(ja, args);
+    const hit = lookup(ja);
+    if (!hit) return fill(ja, args);
+    const a = hit.args.length ? hit.args : args;
+    return fill(hit.zh, a, 'zh');
+  }
+
   // ---------- helpers ----------
   const fmt = (n) => (n == null ? '-' : Number(n).toLocaleString('ja-JP'));
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const STREET_JA = { preflop: 'プリフロップ', flop: 'フロップ', turn: 'ターン', river: 'リバー', showdown: 'ショーダウン', done: 'ハンド終了' };
   const ANTE_JA = { bb: 'BBアンテ', all: '全員アンテ', none: 'アンテなし' };
+  const street = (s) => t(STREET_JA[s]);
 
   let toastTimer = null;
-  function toast(msg, gold) {
-    $toast.textContent = msg;
+  /** msg is a Japanese template; args must be HTML-safe. */
+  function toast(msg, args = [], gold = false) {
+    $toast.innerHTML = t(msg, ...args);
     $toast.className = 'toast' + (gold ? ' gold' : '');
     $toast.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { $toast.hidden = true; }, gold ? 4000 : 2200);
+    toastTimer = setTimeout(() => { $toast.hidden = true; }, gold ? 4000 : 2400);
   }
 
   function pushHistory() {
@@ -65,7 +113,7 @@
       fn(state.game);
     } catch (e) {
       if (undoable) state.history.pop();
-      toast(e.message || String(e));
+      toast(esc(e.message || String(e)));
     }
     save();
     render();
@@ -84,7 +132,7 @@
 
   function blindsLabel(b, compact) {
     let s = compact ? `${fmt(b.sb)}/${fmt(b.bb)}` : `${fmt(b.sb)} / ${fmt(b.bb)}`;
-    if (b.anteMode !== 'none' && b.ante > 0) s += compact ? ` ${b.anteMode === 'bb' ? 'BBA' : 'A'}${fmt(b.ante)}` : `  ${b.anteMode === 'bb' ? 'BBアンテ' : 'アンテ'} ${fmt(b.ante)}`;
+    if (b.anteMode !== 'none' && b.ante > 0) s += compact ? ` ${b.anteMode === 'bb' ? 'BBA' : 'A'}${fmt(b.ante)}` : `  ${tt(b.anteMode === 'bb' ? 'BBアンテ' : 'アンテ')} ${fmt(b.ante)}`;
     return s;
   }
 
@@ -102,35 +150,44 @@
     if (ui.sheet) html += renderSheet();
     $app.innerHTML = html;
     $app.classList.toggle('flip', !!state.flip && state.screen === 'table');
+    document.documentElement.lang = state.lang === 'zh' ? 'zh-Hans' : 'ja';
+    document.documentElement.classList.toggle('lang-zh', state.lang === 'zh');
+    document.title = tt('ポーカーディーラー');
+  }
+
+  function langSeg() {
+    return `<div class="seg lang">
+      <button data-act="lang" data-v="ja" class="${state.lang === 'ja' ? 'on' : ''}">日本語</button>
+      <button data-act="lang" data-v="zh" class="${state.lang === 'zh' ? 'on' : ''}">中文</button>
+    </div>`;
   }
 
   // ----- setup -----
   function renderSetup() {
     const s = state.setup;
     const tour = s.mode === 'tournament';
-    const resume = state.game ? `<button class="primary big" data-act="resume">前回のゲームを続ける (ハンド ${state.game.handNo})</button><p class="hint" style="text-align:center;margin-bottom:12px">新しく始めると前回のデータは消えます</p>` : '';
+    const resume = state.game ? `<button class="primary big" data-act="resume">${t('前回のゲームを続ける (ハンド {0})', state.game.handNo)}</button><p class="hint" style="text-align:center;margin-bottom:12px">${t('新しく始めると前回のデータは消えます')}</p>` : '';
     const names = Array.from({ length: s.count }, (_, i) => `
       <div class="nm"><span>${i + 1}</span><input type="text" data-field="name" data-i="${i}" value="${esc(s.names[i] || '')}" placeholder="P${i + 1}" maxlength="10" enterkeyhint="next"></div>`).join('');
-    const anteMode = tour ? s.tAnteMode : s.anteMode;
     const anteSeg = (field, cur) => `
       <div class="seg">
-        ${['bb', 'all', 'none'].map((m) => `<button data-act="set" data-field="${field}" data-v="${m}" class="${cur === m ? 'on' : ''}">${ANTE_JA[m]}</button>`).join('')}
+        ${['bb', 'all', 'none'].map((m) => `<button data-act="set" data-field="${field}" data-v="${m}" class="${cur === m ? 'on' : ''}">${t(ANTE_JA[m])}</button>`).join('')}
       </div>`;
     let gameCard;
     if (!tour) {
       gameCard = `
       <div class="card">
-        <h3>キャッシュゲーム設定</h3>
+        <h3>${t('キャッシュゲーム設定')}</h3>
         <div class="row">
-          <div class="field"><label>初期スタック</label><input type="number" inputmode="numeric" data-field="startStack" value="${s.startStack}"></div>
+          <div class="field"><label>${t('初期スタック')}</label><input type="number" inputmode="numeric" data-field="startStack" value="${s.startStack}"></div>
         </div>
         <div class="row">
           <div class="field"><label>SB</label><input type="number" inputmode="numeric" data-field="sb" value="${s.sb}"></div>
           <div class="field"><label>BB</label><input type="number" inputmode="numeric" data-field="bb" value="${s.bb}"></div>
         </div>
-        <div class="field"><label>アンテ</label>${anteSeg('anteMode', s.anteMode)}</div>
-        ${s.anteMode !== 'none' ? `<div class="field"><label>アンテ額${s.anteMode === 'bb' ? '（BBが全員分まとめて払う）' : '（全員が毎ハンド払う）'}</label><input type="number" inputmode="numeric" data-field="ante" value="${s.ante}"></div>` : ''}
-        <p class="hint">ブラインドやアンテはゲーム中もメニューから変更できます。</p>
+        <div class="field"><label>${t('アンテ')}</label>${anteSeg('anteMode', s.anteMode)}</div>
+        ${s.anteMode !== 'none' ? `<div class="field"><label>${t(s.anteMode === 'bb' ? 'アンテ額（BBが全員分まとめて払う）' : 'アンテ額（全員が毎ハンド払う）')}</label><input type="number" inputmode="numeric" data-field="ante" value="${s.ante}"></div>` : ''}
+        <p class="hint">${t('ブラインドやアンテはゲーム中もメニューから変更できます。')}</p>
       </div>`;
     } else {
       const rows = s.levels.map((l, i) => `
@@ -143,44 +200,47 @@
         </tr>`).join('');
       gameCard = `
       <div class="card">
-        <h3>トーナメント設定</h3>
+        <h3>${t('トーナメント設定')}</h3>
         <div class="row">
-          <div class="field"><label>初期スタック</label><input type="number" inputmode="numeric" data-field="tStartStack" value="${s.tStartStack}"></div>
-          <div class="field"><label>1レベルの時間（分）</label><input type="number" inputmode="numeric" data-field="levelMinutes" value="${s.levelMinutes}"></div>
+          <div class="field"><label>${t('初期スタック')}</label><input type="number" inputmode="numeric" data-field="tStartStack" value="${s.tStartStack}"></div>
+          <div class="field"><label>${t('1レベルの時間（分）')}</label><input type="number" inputmode="numeric" data-field="levelMinutes" value="${s.levelMinutes}"></div>
         </div>
-        <div class="field"><label>アンテ</label>${anteSeg('tAnteMode', s.tAnteMode)}</div>
-        <button class="small" data-act="toggleLevels">${s.levelsOpen ? 'ブラインド構成を閉じる' : `ブラインド構成を編集（${s.levels.length}レベル、開始 ${fmt(s.levels[0].sb)}/${fmt(s.levels[0].bb)}）`}</button>
+        <div class="field"><label>${t('アンテ')}</label>${anteSeg('tAnteMode', s.tAnteMode)}</div>
+        <button class="small" data-act="toggleLevels">${s.levelsOpen ? t('ブラインド構成を閉じる') : t('ブラインド構成を編集（{0}レベル、開始 {1}）', s.levels.length, `${fmt(s.levels[0].sb)}/${fmt(s.levels[0].bb)}`)}</button>
         ${s.levelsOpen ? `
         <div class="scrollx" style="margin-top:10px">
           <table class="levels">
-            <thead><tr><th>Lv</th><th>SB</th><th>BB</th>${s.tAnteMode !== 'none' ? '<th>アンテ</th>' : ''}<th>分</th></tr></thead>
+            <thead><tr><th>Lv</th><th>SB</th><th>BB</th>${s.tAnteMode !== 'none' ? `<th>${t('アンテ')}</th>` : ''}<th>${t('分')}</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
         <div class="row" style="margin-top:8px">
-          <button class="small" data-act="lvAdd">＋ レベル追加</button>
-          <button class="small" data-act="lvRemove" ${s.levels.length <= 1 ? 'disabled' : ''}>－ 最後を削除</button>
-          <button class="small" data-act="lvReset">初期構成に戻す</button>
+          <button class="small" data-act="lvAdd">${t('＋ レベル追加')}</button>
+          <button class="small" data-act="lvRemove" ${s.levels.length <= 1 ? 'disabled' : ''}>${t('－ 最後を削除')}</button>
+          <button class="small" data-act="lvReset">${t('初期構成に戻す')}</button>
         </div>
-        <p class="hint">アンテ列を空欄にせず 0 にするとそのレベルはアンテなしです。</p>` : ''}
+        <p class="hint">${t('アンテ列を空欄にせず 0 にするとそのレベルはアンテなしです。')}</p>` : ''}
       </div>`;
     }
     return `
     <div class="screen">
-      <h1 class="title">♠ ポーカーディーラー</h1>
-      <p class="subtitle">テーブルの真ん中に置いて使うチップ＆手番マネージャー</p>
+      <h1 class="title">♠ ${t('ポーカーディーラー')}</h1>
+      <p class="subtitle">${t('テーブルの真ん中に置いて使うチップ＆手番マネージャー')}</p>
       ${resume}
       <div class="card">
-        <h3>ゲーム形式</h3>
+        <div class="row"><h3 style="margin:0">${t('言語')}${state.lang === 'ja' ? ' / 语言' : ''}</h3><div style="flex:0 0 auto;min-width:200px">${langSeg()}</div></div>
+      </div>
+      <div class="card">
+        <h3>${t('ゲーム形式')}</h3>
         <div class="seg">
-          <button data-act="set" data-field="mode" data-v="cash" class="${!tour ? 'on' : ''}">キャッシュゲーム</button>
-          <button data-act="set" data-field="mode" data-v="tournament" class="${tour ? 'on' : ''}">トーナメント</button>
+          <button data-act="set" data-field="mode" data-v="cash" class="${!tour ? 'on' : ''}">${t('キャッシュゲーム')}</button>
+          <button data-act="set" data-field="mode" data-v="tournament" class="${tour ? 'on' : ''}">${t('トーナメント')}</button>
         </div>
       </div>
       <div class="card">
-        <h3>プレイヤー</h3>
+        <h3>${t('プレイヤー')}</h3>
         <div class="row" style="margin-bottom:10px">
-          <label style="flex:1;color:var(--muted)">人数</label>
+          <label style="flex:1;color:var(--muted)">${t('人数')}</label>
           <div class="stepper" style="flex:0 0 auto">
             <button data-act="count" data-v="-1" ${s.count <= 2 ? 'disabled' : ''}>－</button>
             <div class="val">${s.count}</div>
@@ -188,11 +248,11 @@
           </div>
         </div>
         <div class="names">${names}</div>
-        <p class="hint">1番から時計回りに座っている順に入力してください。</p>
+        <p class="hint">${t('1番から時計回りに座っている順に入力してください。')}</p>
       </div>
       ${gameCard}
-      <button class="primary big" data-act="start">ゲームを始める</button>
-      <p class="hint" style="text-align:center">画面は端末に自動保存されます。ブラウザを閉じても続きから再開できます。</p>
+      <button class="primary big" data-act="start">${t('ゲームを始める')}</button>
+      <p class="hint" style="text-align:center">${t('画面は端末に自動保存されます。ブラウザを閉じても続きから再開できます。')}</p>
     </div>`;
   }
 
@@ -213,7 +273,7 @@
       <div class="topbar">
         <div class="info">
           <b>${blindsLabel(g.blinds, true)}</b>
-          <span>${g.mode === 'tournament' ? `Lv${g.levelIndex + 1} ・ ` : ''}#${h ? h.no : g.handNo + 1}${h ? ' ・ ' + STREET_JA[h.street] : ' ・ 待機中'}</span>
+          <span>${g.mode === 'tournament' ? `Lv${g.levelIndex + 1} ・ ` : ''}#${h ? h.no : g.handNo + 1} ・ ${h ? street(h.street) : t('待機中')}</span>
         </div>
         ${timer}
         <button class="icon" data-act="menu">☰</button>
@@ -225,12 +285,12 @@
       const total = E.totalPot(h);
       const streetBets = Object.values(h.bets).reduce((a, b) => a + b, 0);
       pot = `<div class="potbox">
-        <div class="street">${STREET_JA[h.street]}</div>
+        <div class="street">${street(h.street)}</div>
         <div class="pot"><small>POT</small>${fmt(total)}</div>
-        ${streetBets > 0 && h.street !== 'done' ? `<div class="sub">前のストリートまで ${fmt(total - streetBets)} ＋ 今のベット ${fmt(streetBets)}</div>` : ''}
+        ${streetBets > 0 && h.street !== 'done' ? `<div class="sub">${t('前のストリートまで {0} ＋ 今のベット {1}', fmt(total - streetBets), fmt(streetBets))}</div>` : ''}
       </div>`;
     } else {
-      pot = `<div class="potbox"><div class="street">${g.handNo === 0 ? 'ゲーム開始前' : '次のハンド待ち'}</div><div class="pot"><small>POT</small>0</div></div>`;
+      pot = `<div class="potbox"><div class="street">${t(g.handNo === 0 ? 'ゲーム開始前' : '次のハンド待ち')}</div><div class="pot"><small>POT</small>0</div></div>`;
     }
 
     // players
@@ -241,15 +301,15 @@
       if (h && p.id === h.sbId && h.sbId !== h.dealerId) pos.push('<i>SB</i>');
       if (h && p.id === h.bbId) pos.push('<i>BB</i>');
       let tag = '';
-      if (p.out) { cls.push('out'); tag = `<span class="tag sit">${g.mode === 'tournament' ? '敗退' : '退席'}</span>`; }
-      else if (p.sitOut) { cls.push('out'); tag = '<span class="tag sit">離席中</span>'; }
+      if (p.out) { cls.push('out'); tag = `<span class="tag sit">${t(g.mode === 'tournament' ? '敗退' : '退席')}</span>`; }
+      else if (p.sitOut) { cls.push('out'); tag = `<span class="tag sit">${t('離席中')}</span>`; }
       else if (h && h.inHandIds.includes(p.id)) {
-        if (h.folded[p.id]) { cls.push('folded'); tag = '<span class="tag fold">フォールド</span>'; }
+        if (h.folded[p.id]) { cls.push('folded'); tag = `<span class="tag fold">${t('フォールド')}</span>`; }
         else if (h.street === 'done' && h.result && h.result.won[p.id]) { cls.push('winner'); tag = `<span class="tag win">＋${fmt(h.result.won[p.id])}</span>`; }
-        else if (h.allIn[p.id]) { cls.push('allin'); tag = '<span class="tag">オールイン</span>'; }
-        else if (h.toAct === p.id) { cls.push('toact'); tag = '<span class="tag act">アクション</span>'; }
-      } else if (h && !h.inHandIds.includes(p.id)) { cls.push('out'); tag = '<span class="tag sit">不参加</span>'; }
-      else if (p.stack === 0) { tag = '<span class="tag sit">チップ 0</span>'; }
+        else if (h.allIn[p.id]) { cls.push('allin'); tag = `<span class="tag">${t('オールイン')}</span>`; }
+        else if (h.toAct === p.id) { cls.push('toact'); tag = `<span class="tag act">${t('アクション')}</span>`; }
+      } else if (h && !h.inHandIds.includes(p.id)) { cls.push('out'); tag = `<span class="tag sit">${t('不参加')}</span>`; }
+      else if (p.stack === 0) { tag = `<span class="tag sit">${t('チップ 0')}</span>`; }
       const bet = h && h.bets[p.id] && h.street !== 'done' ? `<div class="bet">${fmt(h.bets[p.id])}</div>` : '';
       return `<div class="${cls.join(' ')}" data-act="player" data-id="${p.id}">
         <div class="pos">${pos.join('')}</div>
@@ -265,59 +325,65 @@
       const can = E.canStartHand(g);
       const alive = g.players.filter((p) => !p.out);
       if (g.mode === 'tournament' && alive.length === 1) {
-        panel = `<div class="panel"><div class="msg big">🏆 ${esc(alive[0].name)} の優勝！</div><button class="primary big" style="width:100%" data-act="summary">結果を見る</button></div>`;
+        panel = `<div class="panel"><div class="msg big">${t('🏆 {0} の優勝！', esc(alive[0].name))}</div><button class="primary big" style="width:100%" data-act="summary">${t('結果を見る')}</button></div>`;
       } else {
         panel = `<div class="panel">
           ${g.lastResult ? `<div class="results">${Object.keys(g.lastResult.won).map((id) => `<div><span>${esc(E.byId(g, Number(id)).name)}</span><b>＋${fmt(g.lastResult.won[id])}</b></div>`).join('')}</div>` : ''}
-          ${!can ? '<div class="msg">プレイできる人が2人未満です。チップ追加や復帰をしてください。</div>' : ''}
-          <button class="primary big" style="width:100%" data-act="deal" ${can ? '' : 'disabled'}>${g.handNo === 0 ? '最初のハンドを配る' : '次のハンドを配る ▶'}</button>
-          ${g.handNo === 0 ? '<p class="hint" style="text-align:center">ディーラーはランダムに決まります。指定したい場合はプレイヤーをタップ。</p>' : ''}
+          ${!can ? `<div class="msg">${t('プレイできる人が2人未満です。チップ追加や復帰をしてください。')}</div>` : ''}
+          <button class="primary big" style="width:100%" data-act="deal" ${can ? '' : 'disabled'}>${t(g.handNo === 0 ? '最初のハンドを配る' : '次のハンドを配る ▶')}</button>
+          ${g.handNo === 0 ? `<p class="hint" style="text-align:center">${t('ディーラーはランダムに決まります。指定したい場合はプレイヤーをタップ。')}</p>` : ''}
         </div>`;
       }
     } else if (h.street === 'done') {
       const r = h.result;
       panel = `<div class="panel">
-        <div class="msg big">ハンド終了</div>
+        <div class="msg big">${t('ハンド終了')}</div>
         <div class="results">${Object.keys(r.won).map((id) => `<div><span>${esc(E.byId(g, Number(id)).name)}</span><b>＋${fmt(r.won[id])}</b></div>`).join('')}</div>
-        <button class="primary big" style="width:100%" data-act="nextHand">次のハンドへ ▶</button>
+        <button class="primary big" style="width:100%" data-act="nextHand">${t('次のハンドへ ▶')}</button>
       </div>`;
     } else if (h.street === 'showdown') {
       const pots = E.computePots(g);
       pots.forEach((pt, i) => { if (pt.eligible.length === 1) ui.showdown[i] = pt.eligible.slice(); });
       const rows = pots.map((pt, i) => {
         const sel = ui.showdown[i] || [];
+        const label = pots.length === 1 ? t('ポット') : i === 0 ? t('メインポット') : t('サイドポット {0}', i);
         return `<div class="pot-row">
-          <div class="lbl"><span>${pots.length === 1 ? 'ポット' : i === 0 ? 'メインポット' : `サイドポット ${i}`}</span><b>${fmt(pt.amount)}</b></div>
-          <div class="chips">${pt.eligible.map((id) => `<button data-act="pickWinner" data-pot="${i}" data-id="${id}" class="${sel.includes(id) ? 'on' : ''}" ${pt.eligible.length === 1 ? 'disabled' : ''}>${esc(E.byId(g, id).name)}${pt.eligible.length === 1 ? '（返却）' : ''}</button>`).join('')}</div>
+          <div class="lbl"><span>${label}</span><b>${fmt(pt.amount)}</b></div>
+          <div class="chips">${pt.eligible.map((id) => `<button data-act="pickWinner" data-pot="${i}" data-id="${id}" class="${sel.includes(id) ? 'on' : ''}" ${pt.eligible.length === 1 ? 'disabled' : ''}>${esc(E.byId(g, id).name)}${pt.eligible.length === 1 ? t('（返却）') : ''}</button>`).join('')}</div>
         </div>`;
       }).join('');
       const ready = pots.every((pt, i) => (ui.showdown[i] || []).length > 0);
       panel = `<div class="panel">
-        <div class="msg big">ショーダウン</div>
-        ${h.runout ? '<div class="msg">残りのボードを配ってください。</div>' : ''}
-        <div class="msg">勝った人をタップ（引き分けは複数選択）</div>
+        <div class="msg big">${t('ショーダウン')}</div>
+        ${h.runout ? `<div class="msg">${t('残りのボードを配ってください。')}</div>` : ''}
+        <div class="msg">${t('勝った人をタップ（引き分けは複数選択）')}</div>
         <div class="pots">${rows}</div>
-        <button class="green big" style="width:100%" data-act="award" ${ready ? '' : 'disabled'}>ポットを配分する</button>
+        <button class="green big" style="width:100%" data-act="award" ${ready ? '' : 'disabled'}>${t('ポットを配分する')}</button>
       </div>`;
     } else if (la) {
       const p = E.byId(g, la.playerId);
-      const callLabel = la.canCheck ? 'チェック' : la.callIsAllIn ? `コール ${fmt(la.callAmount)}（オールイン）` : `コール ${fmt(la.callAmount)}`;
-      const raiseLabel = la.currentBet === 0 ? 'ベット' : 'レイズ';
+      const callLabel = la.canCheck ? t('チェック') : la.callIsAllIn ? t('コール {0}（オールイン）', fmt(la.callAmount)) : t('コール {0}', fmt(la.callAmount));
+      const raiseWord = la.currentBet === 0 ? 'ベット' : 'レイズ';
+      let info;
+      if (la.currentBet > 0 && la.canRaise) info = t('スタック {0} ・ 現在のベット {1} ・ 最低{2} {3}', fmt(la.stack), fmt(la.currentBet), pair(raiseWord), fmt(la.minRaiseTo));
+      else if (la.currentBet > 0) info = t('スタック {0} ・ 現在のベット {1}', fmt(la.stack), fmt(la.currentBet));
+      else if (la.canRaise) info = t('スタック {0} ・ 最低{1} {2}', fmt(la.stack), pair(raiseWord), fmt(la.minRaiseTo));
+      else info = t('スタック {0}', fmt(la.stack));
       panel = `<div class="panel">
-        <div class="who"><b>${esc(p.name)}</b> の番<span>スタック ${fmt(la.stack)}${la.currentBet > 0 ? ` ・ 現在のベット ${fmt(la.currentBet)}` : ''}${la.canRaise ? ` ・ 最低${raiseLabel} ${fmt(la.minRaiseTo)}` : ''}</span></div>
+        <div class="who">${t('{0} の番', `<b>${esc(p.name)}</b>`)}<span>${info}</span></div>
         <div class="actions">
-          <button class="big" data-act="fold">フォールド</button>
+          <button class="big" data-act="fold">${t('フォールド')}</button>
           <button class="big blue" data-act="${la.canCheck ? 'check' : 'call'}">${callLabel}</button>
-          <button class="big" data-act="raiseOpen" ${la.canRaise ? '' : 'disabled'}>${raiseLabel}</button>
-          <button class="big danger" data-act="allin" ${la.stack > 0 && (la.canRaise || la.callIsAllIn) ? '' : 'disabled'}>オールイン ${fmt(la.maxRaiseTo)}</button>
+          <button class="big" data-act="raiseOpen" ${la.canRaise ? '' : 'disabled'}>${t(raiseWord)}</button>
+          <button class="big danger" data-act="allin" ${la.stack > 0 && (la.canRaise || la.callIsAllIn) ? '' : 'disabled'}>${t('オールイン {0}', fmt(la.maxRaiseTo))}</button>
         </div>
       </div>`;
     }
 
     const bottom = `<div class="bottombar">
-      <button class="undo" data-act="undo" ${state.history.length ? '' : 'disabled'}>↶ 戻す</button>
+      <button class="undo" data-act="undo" ${state.history.length ? '' : 'disabled'}>${t('↶ 戻す')}</button>
       <div class="spacer"></div>
-      ${h && h.street !== 'done' ? `<span class="hint">最後: ${lastActionLabel(g)}</span>` : ''}
+      ${h && h.street !== 'done' ? `<span class="hint">${t('最後: {0}', lastActionLabel(g))}</span>` : ''}
     </div>`;
 
     return `<div class="screen">${header}${pot}<div class="players">${players}</div><div class="spacer"></div>${panel}${bottom}</div>`;
@@ -325,25 +391,25 @@
 
   function lastActionLabel(g) {
     const a = g.hand && g.hand.lastAction;
-    if (!a) return 'ブラインド投入';
+    if (!a) return tt('ブラインド投入');
     const n = esc(E.byId(g, a.id).name);
-    const t = { fold: 'フォールド', check: 'チェック', call: `コール ${fmt(a.amount)}`, raise: `レイズ → ${fmt(a.amount)}`, allin: `オールイン → ${fmt(a.amount)}` }[a.type] || a.type;
-    return `${n} ${t}${a.allIn && a.type !== 'allin' ? '（オールイン）' : ''}`;
+    const tpl = { fold: 'フォールド', check: 'チェック', call: 'コール {0}', raise: 'レイズ → {0}', allin: 'オールイン → {0}' }[a.type] || a.type;
+    return `${n} ${tt(tpl, fmt(a.amount))}${a.allIn && a.type !== 'allin' ? tt('（オールイン）') : ''}`;
   }
 
   // ----- summary -----
   function renderSummary() {
     const g = state.game;
-    const rows = E.summary(g).map((r, i) => `<tr><td>${i + 1}. ${esc(r.name)}${r.out && g.mode === 'tournament' ? `<br><small style="color:var(--muted)">ハンド ${r.bustHand} で敗退</small>` : ''}</td><td>${fmt(r.buyIn)}</td><td>${fmt(r.stack)}</td><td class="${r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : ''}">${r.net > 0 ? '+' : ''}${fmt(r.net)}</td></tr>`).join('');
+    const rows = E.summary(g).map((r, i) => `<tr><td>${i + 1}. ${esc(r.name)}${r.out && g.mode === 'tournament' ? `<br><small style="color:var(--muted)">${t('ハンド {0} で敗退', r.bustHand)}</small>` : ''}</td><td>${fmt(r.buyIn)}</td><td>${fmt(r.stack)}</td><td class="${r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : ''}">${r.net > 0 ? '+' : ''}${fmt(r.net)}</td></tr>`).join('');
     return `<div class="screen summary">
-      <h1 class="title">集計</h1>
-      <p class="subtitle">${g.mode === 'tournament' ? 'トーナメント' : 'キャッシュゲーム'} ・ ${g.handNo} ハンド</p>
+      <h1 class="title">${t('集計')}</h1>
+      <p class="subtitle">${t(g.mode === 'tournament' ? 'トーナメント' : 'キャッシュゲーム')} ・ ${t('{0} ハンド', g.handNo)}</p>
       <div class="card">
-        <table><thead><tr><th>プレイヤー</th><th>持込</th><th>最終</th><th>収支</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>${t('プレイヤー')}</th><th>${t('持込')}</th><th>${t('最終')}</th><th>${t('収支')}</th></tr></thead><tbody>${rows}</tbody></table>
       </div>
-      <button class="big" data-act="backToTable">テーブルに戻る</button>
+      <button class="big" data-act="backToTable">${t('テーブルに戻る')}</button>
       <div style="height:10px"></div>
-      <button class="primary big" data-act="newGame">新しいゲームを始める</button>
+      <button class="primary big" data-act="newGame">${t('新しいゲームを始める')}</button>
     </div>`;
   }
 
@@ -351,66 +417,68 @@
   function renderSheet() {
     const g = state.game;
     const s = ui.sheet;
+    const close = '<button class="icon ghost" data-act="closeSheet">✕</button>';
     let body = '';
     if (s.type === 'menu') {
-      body = `<h2>メニュー <button class="icon ghost" data-act="closeSheet">✕</button></h2>
+      body = `<h2>${t('メニュー')} ${close}</h2>
       <div class="menu">
-        <button data-act="sheet" data-type="blinds">ブラインド・アンテを変更 <small style="color:var(--muted)">（${blindsLabel(g.blinds)}）</small></button>
-        ${g.timer ? '<button data-act="sheet" data-type="levels">レベル・タイマー</button>' : ''}
-        <button data-act="sheet" data-type="addPlayer">プレイヤーを追加</button>
-        <button data-act="toggleFlip">画面を180°回転 ${state.flip ? '（ON）' : ''}</button>
-        ${g.hand && g.hand.street !== 'done' ? '<button data-act="cancelHand">このハンドを中止（ミスディール：チップを返す）</button>' : ''}
-        <button data-act="summary">集計を見る</button>
-        <button class="danger" data-act="newGameConfirm">ゲームを終了して新規作成</button>
+        <button data-act="sheet" data-type="blinds">${t('ブラインド・アンテを変更')} <small style="color:var(--muted)">（${blindsLabel(g.blinds)}）</small></button>
+        ${g.timer ? `<button data-act="sheet" data-type="levels">${t('レベル・タイマー')}</button>` : ''}
+        <button data-act="sheet" data-type="addPlayer">${t('プレイヤーを追加')}</button>
+        <button data-act="toggleFlip">${t('画面を180°回転')} ${state.flip ? t('（ON）') : ''}</button>
+        <div class="row" style="margin-bottom:8px"><span style="flex:0 0 auto;color:var(--muted)">${t('言語')}${state.lang === 'ja' ? ' / 语言' : ''}</span>${langSeg()}</div>
+        ${g.hand && g.hand.street !== 'done' ? `<button data-act="cancelHand">${t('このハンドを中止（ミスディール：チップを返す）')}</button>` : ''}
+        <button data-act="summary">${t('集計を見る')}</button>
+        <button class="danger" data-act="newGameConfirm">${t('ゲームを終了して新規作成')}</button>
       </div>`;
     } else if (s.type === 'blinds') {
       const b = s.draft;
-      body = `<h2>ブラインド・アンテ <button class="icon ghost" data-act="closeSheet">✕</button></h2>
+      body = `<h2>${t('ブラインド・アンテ')} ${close}</h2>
       <div class="row">
         <div class="field"><label>SB</label><input type="number" inputmode="numeric" data-draft="sb" value="${b.sb}"></div>
         <div class="field"><label>BB</label><input type="number" inputmode="numeric" data-draft="bb" value="${b.bb}"></div>
       </div>
-      <div class="field"><label>アンテ</label><div class="seg">${['bb', 'all', 'none'].map((m) => `<button data-act="draftAnteMode" data-v="${m}" class="${b.anteMode === m ? 'on' : ''}">${ANTE_JA[m]}</button>`).join('')}</div></div>
-      ${b.anteMode !== 'none' ? `<div class="field"><label>アンテ額</label><input type="number" inputmode="numeric" data-draft="ante" value="${b.ante}"></div>` : ''}
-      <p class="hint">次のハンドから適用されます。${g.timer ? 'トーナメントではレベルが変わると上書きされます。' : ''}</p>
-      <button class="primary big" style="width:100%" data-act="applyBlinds">適用</button>`;
+      <div class="field"><label>${t('アンテ')}</label><div class="seg">${['bb', 'all', 'none'].map((m) => `<button data-act="draftAnteMode" data-v="${m}" class="${b.anteMode === m ? 'on' : ''}">${t(ANTE_JA[m])}</button>`).join('')}</div></div>
+      ${b.anteMode !== 'none' ? `<div class="field"><label>${t('アンテ額')}</label><input type="number" inputmode="numeric" data-draft="ante" value="${b.ante}"></div>` : ''}
+      <p class="hint">${t('次のハンドから適用されます。')}${g.timer ? t('トーナメントではレベルが変わると上書きされます。') : ''}</p>
+      <button class="primary big" style="width:100%" data-act="applyBlinds">${t('適用')}</button>`;
     } else if (s.type === 'levels') {
       const rows = g.levels.map((l, i) => `<tr class="${i === g.levelIndex ? 'cur' : ''}" data-act="setLevel" data-i="${i}"><td>${i + 1}</td><td>${fmt(l.sb)}</td><td>${fmt(l.bb)}</td><td>${fmt(l.ante)}</td><td>${l.minutes}</td></tr>`).join('');
-      body = `<h2>レベル・タイマー <button class="icon ghost" data-act="closeSheet">✕</button></h2>
+      body = `<h2>${t('レベル・タイマー')} ${close}</h2>
       <div class="row" style="margin-bottom:10px">
-        <button data-act="timer">${g.timer.running ? '⏸ 一時停止' : '▶ 再開'}</button>
-        <button data-act="timerReset">残り時間をリセット</button>
+        <button data-act="timer">${t(g.timer.running ? '⏸ 一時停止' : '▶ 再開')}</button>
+        <button data-act="timerReset">${t('残り時間をリセット')}</button>
       </div>
       <div class="row" style="margin-bottom:10px">
-        <button data-act="levelDelta" data-v="-1" ${g.levelIndex === 0 ? 'disabled' : ''}>◀ 前のレベル</button>
-        <button data-act="levelDelta" data-v="1" ${g.levelIndex >= g.levels.length - 1 ? 'disabled' : ''}>次のレベル ▶</button>
+        <button data-act="levelDelta" data-v="-1" ${g.levelIndex === 0 ? 'disabled' : ''}>${t('◀ 前のレベル')}</button>
+        <button data-act="levelDelta" data-v="1" ${g.levelIndex >= g.levels.length - 1 ? 'disabled' : ''}>${t('次のレベル ▶')}</button>
       </div>
-      <div class="scrollx"><table class="levels"><thead><tr><th>Lv</th><th>SB</th><th>BB</th><th>アンテ</th><th>分</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="hint">行をタップするとそのレベルに移動します（次のハンドから）。</p>`;
+      <div class="scrollx"><table class="levels"><thead><tr><th>Lv</th><th>SB</th><th>BB</th><th>${t('アンテ')}</th><th>${t('分')}</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="hint">${t('行をタップするとそのレベルに移動します（次のハンドから）。')}</p>`;
     } else if (s.type === 'addPlayer') {
-      body = `<h2>プレイヤーを追加 <button class="icon ghost" data-act="closeSheet">✕</button></h2>
-      <div class="field"><label>名前</label><input type="text" id="np-name" placeholder="P${g.players.length + 1}" maxlength="10"></div>
-      <div class="field"><label>スタック</label><input type="number" inputmode="numeric" id="np-stack" value="${s.defaultStack}"></div>
-      <p class="hint">最後の席（${esc(g.players[g.players.length - 1].name)} の左隣）に座ります。次のハンドから参加。</p>
-      <button class="primary big" style="width:100%" data-act="doAddPlayer">追加</button>`;
+      body = `<h2>${t('プレイヤーを追加')} ${close}</h2>
+      <div class="field"><label>${t('名前')}</label><input type="text" id="np-name" placeholder="P${g.players.length + 1}" maxlength="10"></div>
+      <div class="field"><label>${t('スタック')}</label><input type="number" inputmode="numeric" id="np-stack" value="${s.defaultStack}"></div>
+      <p class="hint">${t('最後の席（{0} の左隣）に座ります。次のハンドから参加。', esc(g.players[g.players.length - 1].name))}</p>
+      <button class="primary big" style="width:100%" data-act="doAddPlayer">${t('追加')}</button>`;
     } else if (s.type === 'player') {
       const p = E.byId(g, s.id);
       const h = g.hand;
       const inLiveHand = h && h.street !== 'done' && h.inHandIds.includes(p.id) && !h.folded[p.id];
       const idx = E.idxOf(g, p.id);
-      body = `<h2>${esc(p.name)} <button class="icon ghost" data-act="closeSheet">✕</button></h2>
-      <div class="row" style="margin-bottom:12px"><div>スタック <b style="font-size:22px">${fmt(p.stack)}</b></div><div style="text-align:right;color:var(--muted)">持込合計 ${fmt(p.buyIn)}</div></div>
-      ${inLiveHand ? '<p class="hint">ハンド中のプレイヤーはチップ操作できません。ハンド終了後に行ってください。</p>' : `
-      <div class="field"><label>チップ追加（リバイ／アドオン）</label>
+      body = `<h2>${esc(p.name)} ${close}</h2>
+      <div class="row" style="margin-bottom:12px"><div>${t('スタック {0}', `<b style="font-size:22px">${fmt(p.stack)}</b>`)}</div><div style="text-align:right;color:var(--muted)">${t('持込合計 {0}', fmt(p.buyIn))}</div></div>
+      ${inLiveHand ? `<p class="hint">${t('ハンド中のプレイヤーはチップ操作できません。ハンド終了後に行ってください。')}</p>` : `
+      <div class="field"><label>${t('チップ追加（リバイ／アドオン）')}</label>
         <div class="pm"><button data-act="pm" data-target="#chip-amt" data-v="-100">－</button><input type="number" inputmode="numeric" id="chip-amt" value="${s.defaultStack}"><button data-act="pm" data-target="#chip-amt" data-v="100">＋</button></div>
-        <button class="green" data-act="doAddChips" data-id="${p.id}">チップを追加</button>
+        <button class="green" data-act="doAddChips" data-id="${p.id}">${t('チップを追加')}</button>
       </div>`}
-      <div class="field"><label>名前変更</label><div class="row"><input type="text" id="rename" value="${esc(p.name)}" maxlength="10"><button style="flex:0 0 auto" data-act="doRename" data-id="${p.id}">変更</button></div></div>
+      <div class="field"><label>${t('名前変更')}</label><div class="row"><input type="text" id="rename" value="${esc(p.name)}" maxlength="10"><button style="flex:0 0 auto" data-act="doRename" data-id="${p.id}">${t('変更')}</button></div></div>
       <div class="menu" style="margin-top:8px">
-        ${!p.out ? `<button data-act="toggleSit" data-id="${p.id}" ${inLiveHand ? 'disabled' : ''}>${p.sitOut ? '席に戻る' : '一時離席（次のハンドから飛ばす）'}</button>` : ''}
-        ${!h || h.street === 'done' ? `<button data-act="setDealer" data-i="${idx}" ${p.out || p.sitOut ? 'disabled' : ''}>次のハンドのディーラーにする</button>` : ''}
-        ${g.mode === 'cash' ? (p.out ? `<button data-act="rejoin" data-id="${p.id}">復帰する</button>` : `<button class="ghost" data-act="leave" data-id="${p.id}" ${inLiveHand ? 'disabled' : ''}>退席する（集計には残ります）</button>`) : ''}
-        ${g.mode === 'tournament' && p.out ? `<button data-act="rejoin" data-id="${p.id}">復帰させる（リエントリー：上のチップ追加も使用）</button>` : ''}
+        ${!p.out ? `<button data-act="toggleSit" data-id="${p.id}" ${inLiveHand ? 'disabled' : ''}>${t(p.sitOut ? '席に戻る' : '一時離席（次のハンドから飛ばす）')}</button>` : ''}
+        ${!h || h.street === 'done' ? `<button data-act="setDealer" data-i="${idx}" ${p.out || p.sitOut ? 'disabled' : ''}>${t('次のハンドのディーラーにする')}</button>` : ''}
+        ${g.mode === 'cash' ? (p.out ? `<button data-act="rejoin" data-id="${p.id}">${t('復帰する')}</button>` : `<button class="ghost" data-act="leave" data-id="${p.id}" ${inLiveHand ? 'disabled' : ''}>${t('退席する（集計には残ります）')}</button>`) : ''}
+        ${g.mode === 'tournament' && p.out ? `<button data-act="rejoin" data-id="${p.id}">${t('復帰させる（リエントリー：上のチップ追加も使用）')}</button>` : ''}
       </div>`;
     } else if (s.type === 'raise') {
       const la = E.legalActions(g);
@@ -418,29 +486,28 @@
       const pot = la.pot;
       const potTo = (frac) => clampRaise(la.myBet + la.callAmount + Math.round(frac * (pot + la.callAmount)), la);
       const bb = g.hand.blinds.bb;
-      const isAllIn = to >= la.maxRaiseTo;
-      const label = la.currentBet === 0 ? 'ベット' : 'レイズ';
-      body = `<h2>${label}額を決める <button class="icon ghost" data-act="closeSheet">✕</button></h2>
+      const raiseWord = la.currentBet === 0 ? 'ベット' : 'レイズ';
+      body = `<h2>${t('{0}額を決める', pair(raiseWord))} ${close}</h2>
       <div class="raise-amt" id="raise-amt">${fmt(to)}</div>
       <div class="raise-sub" id="raise-sub">${raiseSub(to, la)}</div>
       <input type="range" id="raise-range" min="${la.minRaiseTo}" max="${la.maxRaiseTo}" step="1" value="${to}">
       <div class="quick">
-        <button data-act="raiseSet" data-v="${la.minRaiseTo}">最小</button>
+        <button data-act="raiseSet" data-v="${la.minRaiseTo}">${t('最小')}</button>
         <button data-act="raiseSet" data-v="${potTo(0.5)}">1/2 Pot</button>
         <button data-act="raiseSet" data-v="${potTo(0.75)}">3/4 Pot</button>
         <button data-act="raiseSet" data-v="${potTo(1)}">Pot</button>
-        <button data-act="raiseSet" data-v="${la.maxRaiseTo}">全額</button>
+        <button data-act="raiseSet" data-v="${la.maxRaiseTo}">${t('全額')}</button>
       </div>
       <div class="pm">
         <button data-act="raiseDelta" data-v="${-bb}">－${fmt(bb)}</button>
         <input type="number" inputmode="numeric" id="raise-input" value="${to}">
         <button data-act="raiseDelta" data-v="${bb}">＋${fmt(bb)}</button>
       </div>
-      <button class="${isAllIn ? 'danger' : 'primary'} big" style="width:100%" data-act="raiseConfirm">${isAllIn ? `オールイン ${fmt(to)}` : `${label} ${fmt(to)} で確定`}</button>`;
+      <button class="${to >= la.maxRaiseTo ? 'danger' : 'primary'} big" style="width:100%" data-act="raiseConfirm">${raiseConfirmLabel(to, la)}</button>`;
     } else if (s.type === 'confirm') {
-      body = `<h2>${esc(s.title)} <button class="icon ghost" data-act="closeSheet">✕</button></h2>
-      <p>${esc(s.text)}</p>
-      <div class="row"><button data-act="closeSheet">キャンセル</button><button class="danger" data-act="${s.act}">${esc(s.ok)}</button></div>`;
+      body = `<h2>${t(s.title)} ${close}</h2>
+      <p>${t(s.text, ...(s.args || []))}</p>
+      <div class="row"><button data-act="closeSheet">${t('キャンセル')}</button><button class="danger" data-act="${s.act}">${t(s.ok)}</button></div>`;
     }
     return `<div class="overlay" data-act="overlay"><div class="sheet">${body}</div></div>`;
   }
@@ -451,10 +518,12 @@
   }
   function raiseSub(to, la) {
     const add = to - la.myBet;
-    const parts = [`追加で ${fmt(add)}`];
-    if (la.currentBet > 0) parts.push(`上乗せ ${fmt(to - la.currentBet)}`);
-    parts.push(`残り ${fmt(la.stack - add)}`);
-    return parts.join(' ・ ');
+    if (la.currentBet > 0) return t('追加で {0} ・ 上乗せ {1} ・ 残り {2}', fmt(add), fmt(to - la.currentBet), fmt(la.stack - add));
+    return t('追加で {0} ・ 残り {1}', fmt(add), fmt(la.stack - add));
+  }
+  function raiseConfirmLabel(to, la) {
+    const raiseWord = la.currentBet === 0 ? 'ベット' : 'レイズ';
+    return to >= la.maxRaiseTo ? t('オールイン {0}', fmt(to)) : t('{0} {1} で確定', pair(raiseWord), fmt(to));
   }
   function updateRaiseSheet(to) {
     const la = E.legalActions(state.game);
@@ -463,17 +532,15 @@
     const a = document.getElementById('raise-amt');
     if (a) a.textContent = fmt(to);
     const sub = document.getElementById('raise-sub');
-    if (sub) sub.textContent = raiseSub(to, la);
+    if (sub) sub.innerHTML = raiseSub(to, la);
     const r = document.getElementById('raise-range');
     if (r && Number(r.value) !== to) r.value = to;
     const inp = document.getElementById('raise-input');
     if (inp && document.activeElement !== inp && Number(inp.value) !== to) inp.value = to;
     const btn = document.querySelector('[data-act="raiseConfirm"]');
     if (btn) {
-      const isAllIn = to >= la.maxRaiseTo;
-      const label = la.currentBet === 0 ? 'ベット' : 'レイズ';
-      btn.className = (isAllIn ? 'danger' : 'primary') + ' big';
-      btn.textContent = isAllIn ? `オールイン ${fmt(to)}` : `${label} ${fmt(to)} で確定`;
+      btn.className = (to >= la.maxRaiseTo ? 'danger' : 'primary') + ' big';
+      btn.innerHTML = raiseConfirmLabel(to, la);
     }
   }
 
@@ -516,14 +583,17 @@
     return { sb: bb / 2, bb, ante: last.ante > 0 ? bb : 0, minutes: last.minutes };
   }
 
+  const anteFor = (mode, bb) => (mode === 'none' ? 0 : mode === 'bb' ? bb : Math.max(1, Math.round(bb / 10)));
+
   // ---------- game actions ----------
   const actions = {
     // setup
+    lang(d) { state.lang = d.v; save(); render(); },
     set(d) {
       const s = state.setup;
       s[d.field] = d.v;
-      if (d.field === 'anteMode' && d.v !== 'none') s.ante = d.v === 'bb' ? s.bb : Math.max(1, Math.round(s.bb / 10));
-      if (d.field === 'tAnteMode') s.levels = s.levels.map((l) => ({ ...l, ante: d.v === 'none' ? 0 : d.v === 'bb' ? l.bb : Math.max(1, Math.round(l.bb / 10)) }));
+      if (d.field === 'anteMode' && d.v !== 'none') s.ante = anteFor(d.v, s.bb);
+      if (d.field === 'tAnteMode') s.levels = s.levels.map((l) => ({ ...l, ante: anteFor(d.v, l.bb) }));
       save(); render();
     },
     count(d) { state.setup.count = Math.max(2, Math.min(10, state.setup.count + Number(d.v))); save(); render(); },
@@ -532,7 +602,7 @@
     lvRemove() { if (state.setup.levels.length > 1) state.setup.levels.pop(); save(); render(); },
     lvReset() {
       const s = state.setup;
-      s.levels = E.defaultLevels(s.levelMinutes || 15).map((l) => ({ ...l, ante: s.tAnteMode === 'none' ? 0 : s.tAnteMode === 'bb' ? l.bb : Math.max(1, Math.round(l.bb / 10)) }));
+      s.levels = E.defaultLevels(s.levelMinutes || 15).map((l) => ({ ...l, ante: anteFor(s.tAnteMode, l.bb) }));
       save(); render();
     },
     start() { startGame(); },
@@ -546,7 +616,7 @@
     call() { mutate((g) => E.act(g, 'call')); },
     allin() {
       const la = E.legalActions(state.game);
-      ui.sheet = { type: 'confirm', title: 'オールイン', text: `${E.byId(state.game, la.playerId).name} が ${fmt(la.maxRaiseTo)} でオールインします。`, ok: 'オールイン', act: 'allinConfirm' };
+      ui.sheet = { type: 'confirm', title: 'オールイン', text: '{0} が {1} でオールインします。', args: [esc(E.byId(state.game, la.playerId).name), fmt(la.maxRaiseTo)], ok: 'オールイン', act: 'allinConfirm' };
       render();
     },
     allinConfirm() { ui.sheet = null; mutate((g) => E.act(g, 'allin')); },
@@ -579,7 +649,7 @@
       mutate((g) => { if (g.timer.running) E.pauseTimer(g); else E.startTimer(g); }, { undoable: false });
     },
     timerReset() { mutate((g) => { g.timer.remainingMs = g.levels[g.levelIndex].minutes * 60000; g.timer.lastTick = g.timer.running ? Date.now() : null; }, { undoable: false }); },
-    levelDelta(d) { mutate((g) => { E.setLevel(g, g.levelIndex + Number(d.v)); ui.sheet.type = 'levels'; }, { undoable: false }); },
+    levelDelta(d) { mutate((g) => { E.setLevel(g, g.levelIndex + Number(d.v)); }, { undoable: false }); },
     setLevel(d) { mutate((g) => E.setLevel(g, Number(d.i)), { undoable: false }); },
     player(d) { ui.sheet = { type: 'player', id: Number(d.id), defaultStack: defaultBuyIn() }; render(); },
     menu() { ui.sheet = { type: 'menu' }; render(); },
@@ -595,7 +665,7 @@
     draftAnteMode(d) {
       const b = ui.sheet.draft;
       b.anteMode = d.v;
-      if (d.v !== 'none' && !(b.ante > 0)) b.ante = d.v === 'bb' ? b.bb : Math.max(1, Math.round(b.bb / 10));
+      if (d.v !== 'none' && !(b.ante > 0)) b.ante = anteFor(d.v, b.bb);
       render();
     },
     applyBlinds() {
@@ -620,7 +690,7 @@
       const amt = readNum(document.getElementById('chip-amt').value, 0);
       if (!(amt > 0)) return toast('金額を入力してください');
       ui.sheet = null;
-      mutate((g) => { E.addChips(g, Number(d.id), amt); toast(`${E.byId(g, Number(d.id)).name} に ${fmt(amt)} 追加`); });
+      mutate((g) => { E.addChips(g, Number(d.id), amt); toast('{0} に {1} 追加', [esc(E.byId(g, Number(d.id)).name), fmt(amt)]); });
     },
     doRename(d) {
       const v = document.getElementById('rename').value.trim();
@@ -638,7 +708,7 @@
         if (g.hand) E.endHand(g);
         if (g.handNo === 0) g.firstDealer = i;
         else g.dealerIdx = (i - 1 + g.players.length) % g.players.length;
-        toast(`${g.players[i].name} が次のディーラーです`);
+        toast('{0} が次のディーラーです', [esc(g.players[i].name)]);
       }, { undoable: false });
     },
     toggleFlip() { state.flip = !state.flip; ui.sheet = null; save(); render(); },
@@ -657,7 +727,6 @@
       ui.sheet = null;
       const g = state.game;
       if (g) {
-        // carry names into setup for convenience
         const alive = g.players.filter((p) => !p.out || g.mode === 'tournament');
         state.setup.count = Math.max(2, Math.min(10, alive.length));
         alive.slice(0, 10).forEach((p, i) => { state.setup.names[i] = p.name; });
@@ -675,7 +744,7 @@
   }
 
   function announceDealer(g) {
-    if (g.hand && g.hand.no === 1) toast(`ディーラーは ${E.byId(g, g.hand.dealerId).name} です`, true);
+    if (g.hand && g.hand.no === 1) toast('ディーラーは {0} です', [esc(E.byId(g, g.hand.dealerId).name)], true);
   }
 
   // ---------- events ----------
@@ -729,14 +798,14 @@
     const changed = E.tickTimer(g);
     save();
     if (changed) {
-      toast(`ブラインドアップ！ レベル ${g.levelIndex + 1}: ${blindsLabel(g.blinds)}（次のハンドから）`, true);
+      toast('ブラインドアップ！ レベル {0}: {1}（次のハンドから）', [g.levelIndex + 1, blindsLabel(g.blinds)], true);
       vibrate([200, 100, 200]);
       render();
     } else {
-      const t = document.getElementById('timer');
-      if (t) {
-        t.textContent = mmss(g.timer.remainingMs);
-        t.parentElement.classList.toggle('warn', g.timer.remainingMs < 60000);
+      const el = document.getElementById('timer');
+      if (el) {
+        el.textContent = mmss(g.timer.remainingMs);
+        el.parentElement.classList.toggle('warn', g.timer.remainingMs < 60000);
       }
     }
   }, 1000);

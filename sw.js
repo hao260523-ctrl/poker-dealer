@@ -1,5 +1,5 @@
 /* Service worker: precache the app shell, serve cache-first, refresh in background. */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `poker-dealer-${VERSION}`;
 const ASSETS = [
   './',
@@ -7,6 +7,7 @@ const ASSETS = [
   './style.css',
   './app.js',
   './engine.js',
+  './i18n.js',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-180.png',
