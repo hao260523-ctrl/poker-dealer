@@ -387,7 +387,12 @@
     A.actions[name] = (d, ev) => { if (isGuest()) guestFn(d, ev); else if (orig) orig(d, ev); };
   };
   const guestAct = (a, amount) => { ui.sheet = null; N.sendHost({ t: 'act', a, amount }); A.render(); };
-  wrap('fold', () => guestAct('fold'));
+  wrap('fold', () => {
+    const la = E.legalActions(st().game);
+    if (la && la.canCheck) { ui.sheet = { type: 'confirm', title: 'フォールド', text: 'チェックできます。本当にフォールドしますか？', ok: 'フォールドする', act: 'foldConfirm' }; A.render(); return; }
+    guestAct('fold');
+  });
+  wrap('foldConfirm', () => guestAct('fold'));
   wrap('check', () => guestAct('check'));
   wrap('call', () => guestAct('call'));
   wrap('allinConfirm', () => guestAct('allin'));

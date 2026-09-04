@@ -747,7 +747,7 @@
     } else if (s.type === 'confirm') {
       body = `<h2>${t(s.title)} ${close}</h2>
       <p>${t(s.text, ...(s.args || []))}</p>
-      <div class="row"><button data-act="closeSheet">${t('キャンセル')}</button><button class="${s.act === 'allinConfirm' ? 'purple' : 'danger'}" data-act="${s.act}">${t(s.ok)}</button></div>`;
+      <div class="row"><button data-act="closeSheet">${t('キャンセル')}</button><button class="${s.act === 'allinConfirm' ? 'purple' : s.act === 'foldConfirm' ? 'blue' : 'danger'}" data-act="${s.act}">${t(s.ok)}</button></div>`;
     }
     return `<div class="overlay" data-act="overlay"><div class="sheet">${body}</div></div>`;
   }
@@ -937,7 +937,15 @@
     // table
     deal() { mutate((g) => { E.startHand(g); ui.showdown = {}; announceDealer(g); }); },
     nextHand() { mutate((g) => { E.endHand(g); E.startHand(g); ui.showdown = {}; announceDealer(g); }); },
-    fold() { mutate((g) => E.act(g, 'fold')); },
+    fold() {
+      const la = E.legalActions(state.game);
+      if (la && la.canCheck) {
+        ui.sheet = { type: 'confirm', title: 'フォールド', text: 'チェックできます。本当にフォールドしますか？', ok: 'フォールドする', act: 'foldConfirm' };
+        return render();
+      }
+      mutate((g) => E.act(g, 'fold'));
+    },
+    foldConfirm() { ui.sheet = null; mutate((g) => E.act(g, 'fold')); },
     check() { mutate((g) => E.act(g, 'check')); },
     call() { mutate((g) => E.act(g, 'call')); },
     allin() {

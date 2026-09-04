@@ -1,5 +1,5 @@
 /* Service worker: precache the app shell, serve cache-first, refresh in background. */
-const VERSION = 'v14';
+const VERSION = 'v15';
 const CACHE = `poker-dealer-${VERSION}`;
 const ASSETS = [
   './',
