@@ -387,6 +387,7 @@
       h.street = 'showdown';
       const pots = computePots(g);
       if (g.cards) {
+        h.boardBefore = h.board.length; // cards already visible before the run-out (for staged reveal)
         dealBoard(h, 5 - h.board.length);
         const hands = evaluateHands(g);
         const awarded = pots.map((pt) => {

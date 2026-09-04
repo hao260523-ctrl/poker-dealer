@@ -32,6 +32,9 @@
   if (!state.setup) state.setup = defaultSetup();
   if (!state.lang) state.lang = 'ja';
   const ui = { sheet: null, showdown: {}, raiseTo: null, saveError: false };
+  const screens = {};   // extra screens: name -> () => html
+  const sheets = {};    // extra sheets: type -> (sheet) => body html
+  const hooks = { renderTable: null, tick: null, afterMutate: [] };
 
   function load() {
     try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; }
@@ -163,11 +166,18 @@
   const HAND_JA = { high_card: 'ハイカード', pair: 'ワンペア', two_pair: 'ツーペア', three_kind: 'スリーカード', straight: 'ストレート', flush: 'フラッシュ', full_house: 'フルハウス', four_kind: 'フォーカード', straight_flush: 'ストレートフラッシュ' };
   const SUIT_SYM = { s: '♠', h: '♥', d: '♦', c: '♣' };
   function cardHtml(c, cls = '') {
-    if (!c) return `<span class="card back ${cls}"></span>`;
+    if (!c) return `<span class="pcard back ${cls}"></span>`;
     const r = c[0] === 'T' ? '10' : c[0];
-    return `<span class="card ${c[1] === 'h' || c[1] === 'd' ? 'red' : ''} ${cls}"><b>${r}</b><i>${SUIT_SYM[c[1]]}</i></span>`;
+    return `<span class="pcard ${c[1] === 'h' || c[1] === 'd' ? 'red' : ''} ${cls}"><b>${r}</b><i>${SUIT_SYM[c[1]]}</i></span>`;
   }
   const cardsHtml = (arr, cls = '') => (arr || []).map((c) => cardHtml(c, cls)).join('');
+  /** Face-down card that can be "squeezed" (class peel) or turned over (class up). */
+  function squeezeHtml(c, up) {
+    const red = c && (c[1] === 'h' || c[1] === 'd');
+    const r = c ? (c[0] === 'T' ? '10' : c[0]) : '';
+    const s = c ? SUIT_SYM[c[1]] : '';
+    return `<div class="sq ${up ? 'up' : ''}"><div class="sq-face ${red ? 'red' : ''}"><span class="ix tl"><b>${r}</b><i>${s}</i></span><span class="pip">${s}</span><span class="ix br"><b>${r}</b><i>${s}</i></span></div><div class="sq-back"></div></div>`;
+  }
   const b64u = {
     enc: (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
     dec: (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)),
@@ -213,12 +223,15 @@
   function mutate(fn, opts = {}) {
     const undoable = opts.undoable !== false;
     if (undoable) pushHistory();
+    let ok = true;
     try {
       fn(state.game);
     } catch (e) {
+      ok = false;
       if (undoable) state.history.pop();
       toast(esc(e.message || String(e)));
     }
+    if (ok) for (const f of hooks.afterMutate) { try { f(); } catch (e) { console.error(e); } }
     save();
     render();
   }
@@ -249,9 +262,10 @@
   function render() {
     let html = '';
     if (state.screen === 'setup') html = renderSetup();
-    else if (state.screen === 'table') html = renderTable();
+    else if (state.screen === 'table') html = (hooks.renderTable && hooks.renderTable()) || renderTable();
     else if (state.screen === 'summary') html = renderSummary(state.game, false);
     else if (state.screen === 'archiveSummary' && state.archive) html = renderSummary(state.archive.game, true);
+    else if (screens[state.screen]) html = screens[state.screen]();
     if (ui.sheet) html += renderSheet();
     $app.innerHTML = html;
     $app.classList.toggle('flip', !!state.flip && state.screen === 'table');
@@ -268,6 +282,11 @@
   }
 
   // ----- setup -----
+  const anteSeg = (field, cur) => `
+      <div class="seg">
+        ${['bb', 'all', 'none'].map((m) => `<button data-act="set" data-field="${field}" data-v="${m}" class="${cur === m ? 'on' : ''}">${t(ANTE_JA[m])}</button>`).join('')}
+      </div>`;
+
   function renderSetup() {
     const s = state.setup;
     const tour = s.mode === 'tournament';
@@ -288,10 +307,68 @@
     }
     const names = Array.from({ length: s.count }, (_, i) => `
       <div class="nm"><span>${i + 1}</span><input type="text" data-field="name" data-i="${i}" value="${esc(s.names[i] || '')}" placeholder="P${i + 1}" maxlength="10" enterkeyhint="next"></div>`).join('');
-    const anteSeg = (field, cur) => `
-      <div class="seg">
-        ${['bb', 'all', 'none'].map((m) => `<button data-act="set" data-field="${field}" data-v="${m}" class="${cur === m ? 'on' : ''}">${t(ANTE_JA[m])}</button>`).join('')}
+    const gameCard = renderGameCard(s);
+    return `
+    <div class="screen">
+      <h1 class="title">♠ ${t('ポーカーディーラー')}</h1>
+      <p class="subtitle">${t('テーブルの真ん中に置いて使うチップ＆手番マネージャー')}</p>
+      ${resume}
+      <div class="card">
+        <div class="row"><h3 style="margin:0">${t('言語')}${state.lang === 'ja' ? ' / 语言' : ''}</h3><div style="flex:0 0 auto;min-width:200px">${langSeg()}</div></div>
+      </div>
+      <div class="card">
+        <h3>${t('遊び方')}</h3>
+        <div class="row">
+          <button class="big" style="flex:1" data-act="olHome">${t('各自のスマホで（ルーム）')}</button>
+        </div>
+        <p class="hint">${t('友達と同じリンクを開き、ルーム番号とパスワードで集まって遊びます。手札は自分のスマホにだけ表示されます。下は「この1台で遊ぶ」設定です。')}</p>
+      </div>
+      ${renderModeCard(s)}
+      ${renderCardsCard(s)}
+      <div class="card">
+        <h3>${t('プレイヤー')}</h3>
+        <div class="row" style="margin-bottom:10px">
+          <label style="flex:1;color:var(--muted)">${t('人数')}</label>
+          <div class="stepper" style="flex:0 0 auto">
+            <button data-act="count" data-v="-1" ${s.count <= 2 ? 'disabled' : ''}>－</button>
+            <div class="val">${s.count}</div>
+            <button data-act="count" data-v="1" ${s.count >= 10 ? 'disabled' : ''}>＋</button>
+          </div>
+        </div>
+        <div class="names">${names}</div>
+        <p class="hint">${t('1番から時計回りに座っている順に入力してください。')}</p>
+      </div>
+      ${gameCard}
+      <button class="primary big" data-act="start">${t('ゲームを始める')}</button>
+      <p class="hint" style="text-align:center">${t('画面は端末に自動保存されます。ブラウザを閉じても続きから再開できます。')}</p>
+      <button class="small ghost" style="margin:6px auto 0;display:block" data-act="sheet" data-type="restoreBackup">${t('バックアップ文字列から復元')}</button>
+    </div>`;
+  }
+
+  function renderModeCard(s) {
+    const tour = s.mode === 'tournament';
+    return `<div class="card">
+        <h3>${t('ゲーム形式')}</h3>
+        <div class="seg">
+          <button data-act="set" data-field="mode" data-v="cash" class="${!tour ? 'on' : ''}">${t('キャッシュゲーム')}</button>
+          <button data-act="set" data-field="mode" data-v="tournament" class="${tour ? 'on' : ''}">${t('トーナメント')}</button>
+        </div>
       </div>`;
+  }
+
+  function renderCardsCard(s) {
+    return `<div class="card">
+        <h3>${t('カード')}</h3>
+        <div class="seg">
+          <button data-act="setCards" data-v="0" class="${!s.cards ? 'on' : ''}">${t('トランプを使う')}</button>
+          <button data-act="setCards" data-v="1" class="${s.cards ? 'on' : ''}">${t('アプリが配る')}</button>
+        </div>
+        <p class="hint">${t(s.cards ? 'アプリがカードを配り、役の判定と配分も自動で行います。自分の手札は手番のときに「手札を見る」を長押しして確認します。' : 'カードは実物のトランプで配ります。アプリはチップと手番だけを管理し、勝者はタップで選びます。')}</p>
+      </div>`;
+  }
+
+  function renderGameCard(s) {
+    const tour = s.mode === 'tournament';
     let gameCard;
     if (!tour) {
       gameCard = `
@@ -341,47 +418,7 @@
         <p class="hint">${t('アンテ列を空欄にせず 0 にするとそのレベルはアンテなしです。')}</p>` : ''}
       </div>`;
     }
-    return `
-    <div class="screen">
-      <h1 class="title">♠ ${t('ポーカーディーラー')}</h1>
-      <p class="subtitle">${t('テーブルの真ん中に置いて使うチップ＆手番マネージャー')}</p>
-      ${resume}
-      <div class="card">
-        <div class="row"><h3 style="margin:0">${t('言語')}${state.lang === 'ja' ? ' / 语言' : ''}</h3><div style="flex:0 0 auto;min-width:200px">${langSeg()}</div></div>
-      </div>
-      <div class="card">
-        <h3>${t('ゲーム形式')}</h3>
-        <div class="seg">
-          <button data-act="set" data-field="mode" data-v="cash" class="${!tour ? 'on' : ''}">${t('キャッシュゲーム')}</button>
-          <button data-act="set" data-field="mode" data-v="tournament" class="${tour ? 'on' : ''}">${t('トーナメント')}</button>
-        </div>
-      </div>
-      <div class="card">
-        <h3>${t('カード')}</h3>
-        <div class="seg">
-          <button data-act="setCards" data-v="0" class="${!s.cards ? 'on' : ''}">${t('トランプを使う')}</button>
-          <button data-act="setCards" data-v="1" class="${s.cards ? 'on' : ''}">${t('アプリが配る')}</button>
-        </div>
-        <p class="hint">${t(s.cards ? 'アプリがカードを配り、役の判定と配分も自動で行います。自分の手札は手番のときに「手札を見る」を長押しして確認します。' : 'カードは実物のトランプで配ります。アプリはチップと手番だけを管理し、勝者はタップで選びます。')}</p>
-      </div>
-      <div class="card">
-        <h3>${t('プレイヤー')}</h3>
-        <div class="row" style="margin-bottom:10px">
-          <label style="flex:1;color:var(--muted)">${t('人数')}</label>
-          <div class="stepper" style="flex:0 0 auto">
-            <button data-act="count" data-v="-1" ${s.count <= 2 ? 'disabled' : ''}>－</button>
-            <div class="val">${s.count}</div>
-            <button data-act="count" data-v="1" ${s.count >= 10 ? 'disabled' : ''}>＋</button>
-          </div>
-        </div>
-        <div class="names">${names}</div>
-        <p class="hint">${t('1番から時計回りに座っている順に入力してください。')}</p>
-      </div>
-      ${gameCard}
-      <button class="primary big" data-act="start">${t('ゲームを始める')}</button>
-      <p class="hint" style="text-align:center">${t('画面は端末に自動保存されます。ブラウザを閉じても続きから再開できます。')}</p>
-      <button class="small ghost" style="margin:6px auto 0;display:block" data-act="sheet" data-type="restoreBackup">${t('バックアップ文字列から復元')}</button>
-    </div>`;
+    return gameCard;
   }
 
   // ----- table -----
@@ -412,7 +449,7 @@
     if (h) {
       const total = E.totalPot(h);
       const streetBets = Object.values(h.bets).reduce((a, b) => a + b, 0);
-      const board = g.cards ? `<div class="board">${cardsHtml(h.board, 'md')}${'<span class="card slot md"></span>'.repeat(Math.max(0, 5 - (h.board || []).length))}</div>` : '';
+      const board = g.cards ? `<div class="board">${cardsHtml(h.board, 'md')}${'<span class="pcard slot md"></span>'.repeat(Math.max(0, 5 - (h.board || []).length))}</div>` : '';
       pot = `<div class="potbox">
         <div class="street">${street(h.street)}</div>
         <div class="pot"><small>POT</small>${fmt(total)}</div>
@@ -686,6 +723,8 @@
       <p class="hint" style="margin:0 0 8px">${t('メニューの「バックアップ文字列をコピー」で取った文字列を貼り付けてください。')}</p>
       <textarea id="backup-text" rows="6" class="backup" placeholder="{...}"></textarea>
       <button class="primary big" style="width:100%;margin-top:10px" data-act="doRestoreBackup">${t('復元する')}</button>`;
+    } else if (sheets[s.type]) {
+      body = sheets[s.type](s, close);
     } else if (s.type === 'confirm') {
       body = `<h2>${t(s.title)} ${close}</h2>
       <p>${t(s.text, ...(s.args || []))}</p>
@@ -732,17 +771,17 @@
     return Number.isFinite(n) && n >= 0 ? n : fallback;
   }
 
-  function startGame() {
+  /** Validate the setup form and build an engine config (players filled by caller). Returns null after toasting an error. */
+  function buildGameConfig() {
     const s = state.setup;
     const tour = s.mode === 'tournament';
     const stack = tour ? s.tStartStack : s.startStack;
-    if (!(stack > 0)) return toast('初期スタックを入力してください');
-    if (!tour && !(s.bb > 0 && s.sb > 0)) return toast('SB / BB を入力してください');
-    if (!tour && s.sb > s.bb) return toast('SB は BB 以下にしてください');
-    if (tour && s.levels.some((l) => !(l.bb > 0 && l.sb > 0 && l.minutes > 0))) return toast('ブラインド構成に不正な値があります');
-    const players = Array.from({ length: s.count }, (_, i) => ({ name: s.names[i], stack }));
+    if (!(stack > 0)) { toast('初期スタックを入力してください'); return null; }
+    if (!tour && !(s.bb > 0 && s.sb > 0)) { toast('SB / BB を入力してください'); return null; }
+    if (!tour && s.sb > s.bb) { toast('SB は BB 以下にしてください'); return null; }
+    if (tour && s.levels.some((l) => !(l.bb > 0 && l.sb > 0 && l.minutes > 0))) { toast('ブラインド構成に不正な値があります'); return null; }
     const cfg = {
-      mode: s.mode, players, cards: !!s.cards,
+      mode: s.mode, players: [], cards: !!s.cards, stack,
       sb: s.sb, bb: s.bb, anteMode: s.anteMode, ante: s.anteMode === 'none' ? 0 : s.ante,
     };
     if (tour) {
@@ -750,6 +789,14 @@
       cfg.levelMinutes = s.levelMinutes;
       cfg.levels = s.levels.map((l) => ({ ...l, ante: s.tAnteMode === 'none' ? 0 : l.ante }));
     }
+    return cfg;
+  }
+
+  function startGame() {
+    const s = state.setup;
+    const cfg = buildGameConfig();
+    if (!cfg) return;
+    cfg.players = Array.from({ length: s.count }, (_, i) => ({ name: s.names[i], stack: cfg.stack }));
     if (state.game) state.archive = { game: state.game, endedAt: Date.now() };
     state.game = E.createGame(cfg);
     state.history = [];
@@ -1049,8 +1096,9 @@
     const h = g && g.hand;
     const el = document.getElementById('hole-view');
     if (!el || !h || !h.hole || !h.hole[id]) return;
-    el.innerHTML = cardsHtml(h.hole[id], 'lg');
+    el.innerHTML = h.hole[id].map((c) => squeezeHtml(c, false)).join('');
     el.classList.add('show');
+    requestAnimationFrame(() => el.querySelectorAll('.sq').forEach((q) => q.classList.add('peel')));
   }
   function hideHole() {
     const el = document.getElementById('hole-view');
@@ -1083,6 +1131,7 @@
 
   // ---------- timer loop ----------
   setInterval(() => {
+    if (hooks.tick && hooks.tick()) return;
     const g = state.game;
     if (!g || !g.timer || !g.timer.running || state.screen !== 'table') return;
     const changed = E.tickTimer(g);
@@ -1115,6 +1164,16 @@
       if (state.game && state.game.timer) render();
     }
   });
+
+  window.PokerApp = {
+    get state() { return state; },
+    set state(v) { state = v; },
+    ui, screens, sheets, hooks, actions, E,
+    render, save, mutate, toast, t, tt, pair, esc, fmt, mmss, blindsLabel, street, langSeg,
+    cardHtml, cardsHtml, squeezeHtml, HAND_JA, STREET_JA, ANTE_JA,
+    renderModeCard, renderCardsCard, renderGameCard, defaultBuyIn, requestWakeLock, requestPersistentStorage, vibrate,
+    startGameConfig: () => buildGameConfig(),
+  };
 
   render();
   renderSaveBanner();
