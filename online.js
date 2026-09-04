@@ -604,14 +604,14 @@
     const revealed = h && h.board ? (isHost() && h.revealed != null ? Math.min(h.revealed, h.board.length) : h.board.length) : 0;
     const board = h && h.board ? h.board.slice(0, revealed) : [];
     const revealing = h && g.cards && ((isHost() && h.street === 'done' && h.revealed < h.board.length) || (isGuest() && h.pendingResult));
-    const hidden = { ...h };
     const done = h && h.street === 'done' && !revealing;
+    // while the run-out is still being revealed, show stacks as they were before the pots were awarded
+    const shownStack = (p) => (revealing && h.result && h.result.won && h.result.won[p.id] ? p.stack - h.result.won[p.id] : p.stack);
     const showAll = done && h.result && h.result.hands;
     const myIdx = E.idxOf(g, me);
     const n = g.players.length;
     const others = [];
     for (let k = 1; k < n; k++) others.push(g.players[(myIdx + k) % n]);
-    void hidden;
 
     const oppHtml = (p) => {
       const av = avatarOf(p);
@@ -636,7 +636,7 @@
       return `<div class="${cls.join(' ')}" data-act="player" data-id="${p.id}">
         <div class="bust"><div class="avatar" style="--c:${av.color}">${av.emoji}</div>${p.id === dealerId ? '<i class="dbtn">D</i>' : ''}</div>
         <div class="opp-name">${esc(p.name)}</div>
-        <div class="opp-stack">${chipStack(p.stack, 'xs')}<b>${fmt(p.stack)}</b></div>
+        <div class="opp-stack">${chipStack(shownStack(p), 'xs')}<b>${fmt(shownStack(p))}</b></div>
         ${tag ? `<div class="opp-tag">${tag}</div>` : ''}
         ${cards}
         ${pn != null ? `<div class="opp-won">${A.netHtml(pn)}</div>` : ''}
@@ -717,7 +717,7 @@
       </div>
       <div class="tv-me">
         <div class="merow">
-          <div class="meinfo"><span class="avatar sm" style="--c:${avatarOf(meP).color}">${avatarOf(meP).emoji}</span><div><div class="opp-name">${esc(meP.name)} ${me === dealerId ? '<i class="dbtn">D</i>' : ''} ${meStatus}</div><div class="opp-stack">${chipStack(meP.stack, 'xs')}<b>${fmt(meP.stack)}</b></div></div></div>
+          <div class="meinfo"><span class="avatar sm" style="--c:${avatarOf(meP).color}">${avatarOf(meP).emoji}</span><div><div class="opp-name">${esc(meP.name)} ${me === dealerId ? '<i class="dbtn">D</i>' : ''} ${meStatus}</div><div class="opp-stack">${chipStack(shownStack(meP), 'xs')}<b>${fmt(shownStack(meP))}</b></div></div></div>
           ${myBet}
         </div>
         ${cardsArea}
