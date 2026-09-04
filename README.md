@@ -17,9 +17,13 @@
 - 終了時に **収支サマリー**（持込・最終・収支）
 - 状態は端末に自動保存。ブラウザを閉じても続きから再開。オフラインでも動作（Service Worker）。画面スリープ防止（対応端末）
 
+## 公開 URL
+
+**https://hao260523-ctrl.github.io/poker-dealer/**
+
 ## 使い方（ホーム画面に追加）
 
-1. 公開 URL を携帯のブラウザで開く
+1. 上の URL を携帯のブラウザで開く
 2. iPhone: Safari の共有ボタン →「ホーム画面に追加」／ Android: Chrome のメニュー →「ホーム画面に追加」または「アプリをインストール」
 3. ホーム画面のアイコンから起動するとフルスクリーンで使えます
 
@@ -32,17 +36,11 @@ python -m http.server 8000
 # → http://localhost:8000/
 ```
 
-## GitHub Pages で公開する
+## 公開（GitHub Pages）
 
-```
-git remote add origin https://github.com/<ユーザー名>/<リポジトリ名>.git
-git push -u origin main
-```
+リポジトリ: https://github.com/hao260523-ctrl/poker-dealer （`main` ブランチのルートから配信）
 
-GitHub のリポジトリ → Settings → Pages → 「Deploy from a branch」→ Branch: `main` / `/ (root)` → Save。
-数分後に `https://<ユーザー名>.github.io/<リポジトリ名>/` で公開されます。
-
-更新を反映したい時は push するだけです。`sw.js` の `VERSION` を上げると古いキャッシュが確実に破棄されます。
+更新を反映したい時は `main` に push するだけです。`sw.js` の `VERSION` を上げると古いキャッシュが確実に破棄されます。
 
 ## テスト
 
