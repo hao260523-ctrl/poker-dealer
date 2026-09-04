@@ -287,3 +287,18 @@ test('cards mode: fold-out awards without revealing', () => {
   assert.equal(h.result.showdown, undefined);
   assert.deepEqual(stacks(g), [99, 101]);
 });
+
+test('net result subtracts own contribution and is negative for losers', () => {
+  const g = game([100, 100, 100], { anteMode: 'bb', ante: 2 });
+  const h = E.startHand(g);
+  // dealer=1, sb=2 (1), bb=3 (2 + ante 2)
+  E.act(g, 'raise', 10); // P1 to 10
+  E.act(g, 'call'); // P2
+  E.act(g, 'fold'); // P3 loses blind + ante = 4
+  for (let i = 0; i < 6; i++) E.act(g, 'check');
+  assert.equal(h.street, 'showdown');
+  E.awardPots(g, [[1]]);
+  assert.deepEqual(h.result.net, { 1: 14, 2: -10, 3: -4 });
+  assert.equal(Object.values(h.result.net).reduce((a, b) => a + b, 0), 0);
+  assert.deepEqual(g.handLog[0].net, h.result.net);
+});

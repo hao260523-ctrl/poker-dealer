@@ -171,6 +171,20 @@
     return `<span class="pcard ${c[1] === 'h' || c[1] === 'd' ? 'red' : ''} ${cls}"><b>${r}</b><i>${SUIT_SYM[c[1]]}</i></span>`;
   }
   const cardsHtml = (arr, cls = '') => (arr || []).map((c) => cardHtml(c, cls)).join('');
+  /** Signed net amount with colour class. */
+  const netHtml = (n) => `<b class="net ${n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero'}">${n > 0 ? '+' : ''}${fmt(n)}</b>`;
+  /** Result rows for a finished hand: everyone dealt in, sorted by net (then by hand strength). */
+  function resultRows(g, r) {
+    const net = r.net || {};
+    const ids = Object.keys(net).length ? Object.keys(net) : Object.keys(r.won);
+    ids.sort((x, y) => (net[y] || 0) - (net[x] || 0) || ((r.hands && r.hands[y] ? r.hands[y].score : 0) - (r.hands && r.hands[x] ? r.hands[x].score : 0)));
+    return ids.map((id) => {
+      const p = E.byId(g, Number(id));
+      const hd = r.hands && r.hands[id];
+      const n = net[id] != null ? net[id] : (r.won[id] || 0);
+      return `<div class="${n > 0 ? 'win' : n < 0 ? 'lose' : ''}"><span>${esc(p ? p.name : '?')}${hd ? ` <span class="cards-inline">${cardsHtml(hd.cards, 'sm')}</span> <small>${t(HAND_JA[hd.name])}</small>` : ''}</span>${netHtml(n)}</div>`;
+    }).join('');
+  }
   /** Face-down card that can be "squeezed" (class peel) or turned over (class up). */
   function squeezeHtml(c, up) {
     const red = c && (c[1] === 'h' || c[1] === 'd');
@@ -473,7 +487,7 @@
       else if (p.sitOut) { cls.push('out'); tag = `<span class="tag sit">${t('離席中')}</span>`; }
       else if (h && h.inHandIds.includes(p.id)) {
         if (h.folded[p.id]) { cls.push('folded'); tag = `<span class="tag fold">${t('フォールド')}</span>`; }
-        else if (h.street === 'done' && h.result && h.result.won[p.id]) { cls.push('winner'); tag = `<span class="tag win">＋${fmt(h.result.won[p.id])}</span>`; }
+        else if (h.street === 'done' && h.result && h.result.net && h.result.net[p.id] != null) { const n = h.result.net[p.id]; if (n > 0) cls.push('winner'); tag = `<span class="tag ${n > 0 ? 'win' : n < 0 ? 'lose' : 'sit'}">${n > 0 ? '+' : ''}${fmt(n)}</span>`; }
         else if (h.allIn[p.id]) { cls.push('allin'); tag = `<span class="tag">${t('オールイン')}</span>`; }
         else if (h.toAct === p.id) { cls.push('toact'); tag = `<span class="tag act">${t('アクション')}</span>`; }
       } else if (h && !h.inHandIds.includes(p.id)) { cls.push('out'); tag = `<span class="tag sit">${t('不参加')}</span>`; }
@@ -501,7 +515,7 @@
         panel = `<div class="panel"><div class="msg big">${t('🏆 {0} の優勝！', esc(alive[0].name))}</div><button class="primary big" style="width:100%" data-act="summary">${t('結果を見る')}</button></div>`;
       } else {
         panel = `<div class="panel">
-          ${g.lastResult ? `<div class="results">${Object.keys(g.lastResult.won).map((id) => `<div><span>${esc(E.byId(g, Number(id)).name)}</span><b>＋${fmt(g.lastResult.won[id])}</b></div>`).join('')}</div>` : ''}
+          ${g.lastResult ? `<div class="results">${resultRows(g, g.lastResult)}</div>` : ''}
           ${!can ? `<div class="msg">${t('プレイできる人が2人未満です。チップ追加や復帰をしてください。')}</div>` : ''}
           <button class="primary big" style="width:100%" data-act="deal" ${can ? '' : 'disabled'}>${t(g.handNo === 0 ? '最初のハンドを配る' : '次のハンドを配る ▶')}</button>
           ${g.handNo === 0 ? `<p class="hint" style="text-align:center">${t('ディーラーはランダムに決まります。指定したい場合はプレイヤーをタップ。')}</p>` : ''}
@@ -509,9 +523,7 @@
       }
     } else if (h.street === 'done') {
       const r = h.result;
-      const rows = r.hands
-        ? Object.keys(r.hands).sort((x, y) => r.hands[y].score - r.hands[x].score).map((id) => `<div class="${r.won[id] ? 'win' : ''}"><span>${esc(E.byId(g, Number(id)).name)} <span class="cards-inline">${cardsHtml(r.hands[id].cards, 'sm')}</span> <small>${t(HAND_JA[r.hands[id].name])}</small></span><b>${r.won[id] ? '＋' + fmt(r.won[id]) : ''}</b></div>`).join('')
-        : Object.keys(r.won).map((id) => `<div><span>${esc(E.byId(g, Number(id)).name)}</span><b>＋${fmt(r.won[id])}</b></div>`).join('');
+      const rows = resultRows(g, r);
       panel = `<div class="panel">
         <div class="msg big">${t(r.showdown ? 'ショーダウン' : 'ハンド終了')}</div>
         <div class="results">${rows}</div>
@@ -690,7 +702,8 @@
     } else if (s.type === 'history') {
       const log = (g.handLog || []).slice().reverse();
       const rows = log.map((r) => {
-        const winners = Object.keys(r.won).map((id) => { const p = E.byId(g, Number(id)); return `${esc(p ? p.name : '?')} +${fmt(r.won[id])}`; }).join(', ');
+        const src = r.net && Object.keys(r.net).length ? r.net : r.won;
+        const winners = Object.keys(src).sort((x, y) => src[y] - src[x]).map((id) => { const p = E.byId(g, Number(id)); const n = src[id]; return `<span class="net ${n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero'}">${esc(p ? p.name : '?')} ${n > 0 ? '+' : ''}${fmt(n)}</span>`; }).join('　');
         const stacks = r.stacks.map(([id, st]) => { const p = E.byId(g, id); return `${esc(p ? p.name : '?')} ${fmt(st)}`; }).join(' / ');
         return `<div class="hist">
           <div class="hist-top"><b>#${r.no}</b><span>${winners}</span><button class="small" data-act="restoreHand" data-no="${r.no}">${t('ここに戻す')}</button></div>
@@ -1185,7 +1198,7 @@
     set state(v) { state = v; },
     ui, screens, sheets, hooks, actions, E,
     render, save, mutate, toast, t, tt, pair, esc, fmt, mmss, blindsLabel, street, langSeg,
-    cardHtml, cardsHtml, squeezeHtml, HAND_JA, STREET_JA, ANTE_JA,
+    cardHtml, cardsHtml, squeezeHtml, netHtml, resultRows, HAND_JA, STREET_JA, ANTE_JA,
     renderModeCard, renderCardsCard, renderGameCard, defaultBuyIn, requestWakeLock, requestPersistentStorage, vibrate,
     startGameConfig: () => buildGameConfig(),
     siteUrl,

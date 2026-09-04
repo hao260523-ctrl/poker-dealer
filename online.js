@@ -617,7 +617,8 @@
       if (h && h.toAct === p.id) cls.push('think');
       if (folded || p.out || p.sitOut || (h && !h.inHandIds.includes(p.id))) cls.push('dim');
       if (p.offline) cls.push('offline');
-      if (done && h.result.won[p.id]) cls.push('won');
+      const pn = done && h.result.net ? h.result.net[p.id] : undefined;
+      if (pn > 0) cls.push('won');
       let tag = '';
       if (p.out) tag = t(g.mode === 'tournament' ? '敗退' : '退席');
       else if (p.offline) tag = t('接続待ち');
@@ -633,7 +634,7 @@
         <div class="opp-stack">${chipStack(p.stack, 'xs')}<b>${fmt(p.stack)}</b></div>
         ${tag ? `<div class="opp-tag">${tag}</div>` : ''}
         ${cards}
-        ${done && h.result.won[p.id] ? `<div class="opp-won">＋${fmt(h.result.won[p.id])}</div>` : ''}
+        ${pn != null ? `<div class="opp-won">${A.netHtml(pn)}</div>` : ''}
         ${bet}
       </div>`;
     };
@@ -669,9 +670,7 @@
       act = `<div class="msg big">${t('ボードを公開中…')}</div>`;
     } else if (done) {
       const r = h.result;
-      const rows = r.hands
-        ? Object.keys(r.hands).sort((x, y) => r.hands[y].score - r.hands[x].score).map((id) => `<div class="${r.won[id] ? 'win' : ''}"><span>${esc(E.byId(g, Number(id)).name)} <span class="cards-inline">${A.cardsHtml(r.hands[id].cards, 'sm')}</span> <small>${t(A.HAND_JA[r.hands[id].name])}</small></span><b>${r.won[id] ? '＋' + fmt(r.won[id]) : ''}</b></div>`).join('')
-        : Object.keys(r.won).map((id) => `<div class="win"><span>${esc(E.byId(g, Number(id)).name)}</span><b>＋${fmt(r.won[id])}</b></div>`).join('');
+      const rows = A.resultRows(g, r);
       const secs = h.nextAt ? Math.max(0, Math.ceil((h.nextAt - Date.now()) / 1000)) : null;
       const auto = isHost() ? o.autoNext : (ui.meta && ui.meta.autoNext);
       const rebuy = g.mode === 'cash' && meP && meP.stack === 0 ? `<button class="green" style="width:100%;margin-bottom:8px" data-act="olRebuy">${t('チップを追加（リバイ）')}</button>` : '';
@@ -698,7 +697,8 @@
     }
 
     const myBet = h && h.bets[me] && h.street !== 'done' ? `<div class="mybet">${chipStack(h.bets[me], 'xs')}<b>${fmt(h.bets[me])}</b></div>` : '';
-    const meStatus = meP && meP.offline ? '' : (h && h.allIn[me] ? `<span class="tag">${t('オールイン')}</span>` : '');
+    const myNet = done && h.result.net && h.result.net[me] != null ? h.result.net[me] : null;
+    const meStatus = myNet != null ? A.netHtml(myNet) : (meP && meP.offline ? '' : (h && h.allIn[me] ? `<span class="tag">${t('オールイン')}</span>` : ''));
     const overlay = (isGuest() && !N.connected) || (isHost() && N.status !== 'online') ? `<div class="netbar">${connDot()} ${esc(statusLabel()) || t('接続中…')}</div>` : '';
 
     return `<div class="tv ${others.length <= 1 ? 'hu' : ''} ${others.length >= 5 ? 'many' : ''}">

@@ -478,18 +478,21 @@
         won[id] = (won[id] || 0) + a;
       }
     }
-    h.result = { pots: awardedPots, won };
+    // net result of the hand for everyone dealt in: winnings minus everything they put in (blinds/antes included)
+    const net = {};
+    for (const id of h.inHandIds) net[id] = (won[id] || 0) - (h.committed[id] || 0);
+    h.result = { pots: awardedPots, won, net };
     h.street = 'done';
     h.toAct = null;
     h.needToAct = [];
-    g.lastResult = { handNo: h.no, won, pots: awardedPots };
+    g.lastResult = { handNo: h.no, won, net, pots: awardedPots };
     // tournament: bust players
     if (g.mode === 'tournament') {
       for (const p of g.players) if (!p.out && p.stack === 0) { p.out = true; p.bustHand = h.no; }
     }
     // per-hand checkpoint (stacks right after the hand) for review / recovery
     g.handLog = g.handLog || [];
-    g.handLog.push({ no: h.no, dealerId: h.dealerId, won, stacks: g.players.map((p) => [p.id, p.stack]), at: Date.now() });
+    g.handLog.push({ no: h.no, dealerId: h.dealerId, won, net, stacks: g.players.map((p) => [p.id, p.stack]), at: Date.now() });
     if (g.handLog.length > 500) g.handLog.shift();
   }
 
@@ -502,7 +505,7 @@
     g.handNo = no;
     g.dealerIdx = idxOf(g, rec.dealerId);
     g.handLog = g.handLog.filter((r) => r.no <= no);
-    g.lastResult = { handNo: no, won: rec.won, pots: [] };
+    g.lastResult = { handNo: no, won: rec.won, net: rec.net || {}, pots: [] };
     if (g.mode === 'tournament') {
       for (const p of g.players) {
         if (p.stack > 0 && p.out) { p.out = false; delete p.bustHand; }
