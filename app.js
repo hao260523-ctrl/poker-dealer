@@ -30,13 +30,83 @@
   let state = load() || { screen: 'setup', game: null, history: [], setup: defaultSetup(), flip: false, lang: 'ja' };
   if (!state.setup) state.setup = defaultSetup();
   if (!state.lang) state.lang = 'ja';
-  const ui = { sheet: null, showdown: {}, raiseTo: null };
+  const ui = { sheet: null, showdown: {}, raiseTo: null, saveError: false };
 
   function load() {
     try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; }
   }
+
+  // IndexedDB mirror: survives in browsers that drop localStorage, and lets us ask for persistent storage.
+  const idb = {
+    open() {
+      return new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) return reject(new Error('no idb'));
+        const req = indexedDB.open('pokerDealer', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('kv');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    },
+    async get(key) {
+      const db = await idb.open();
+      return new Promise((resolve, reject) => {
+        const r = db.transaction('kv').objectStore('kv').get(key);
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+      });
+    },
+    async set(key, val) {
+      const db = await idb.open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(val, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    },
+  };
+
+  let saveSeq = 0;
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    state.savedAt = Date.now();
+    const json = JSON.stringify(state);
+    let okLocal = true;
+    try { localStorage.setItem(KEY, json); } catch (e) { okLocal = false; }
+    const seq = ++saveSeq;
+    idb.set(KEY, json).then(() => {
+      if (seq === saveSeq && ui.saveError) { ui.saveError = false; renderSaveBanner(); }
+    }).catch(() => {
+      if (!okLocal && seq === saveSeq) { ui.saveError = true; renderSaveBanner(); }
+    });
+    if (!okLocal) { ui.saveError = true; renderSaveBanner(); }
+  }
+
+  function renderSaveBanner() {
+    let el = document.getElementById('savebanner');
+    if (!ui.saveError) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'savebanner'; el.className = 'savebanner'; document.body.appendChild(el); }
+    el.innerHTML = t('保存できていません。ブラウザの設定（サイトデータのブロック／シークレットモード）を確認してください。');
+  }
+
+  /** Adopt the IndexedDB copy if it is newer than what localStorage gave us (e.g. localStorage was wiped). */
+  async function recoverFromIdb() {
+    try {
+      const json = await idb.get(KEY);
+      if (!json) return;
+      const other = JSON.parse(json);
+      const mine = state.savedAt || 0;
+      if ((other.savedAt || 0) > mine && (other.game || other.archive)) {
+        state = other;
+        if (!state.setup) state.setup = defaultSetup();
+        if (!state.lang) state.lang = 'ja';
+        render();
+        toast('保存データを復元しました');
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function requestPersistentStorage() {
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) { /* ignore */ }
   }
 
   // ---------- i18n ----------
@@ -146,7 +216,8 @@
     let html = '';
     if (state.screen === 'setup') html = renderSetup();
     else if (state.screen === 'table') html = renderTable();
-    else if (state.screen === 'summary') html = renderSummary();
+    else if (state.screen === 'summary') html = renderSummary(state.game, false);
+    else if (state.screen === 'archiveSummary' && state.archive) html = renderSummary(state.archive.game, true);
     if (ui.sheet) html += renderSheet();
     $app.innerHTML = html;
     $app.classList.toggle('flip', !!state.flip && state.screen === 'table');
@@ -166,7 +237,21 @@
   function renderSetup() {
     const s = state.setup;
     const tour = s.mode === 'tournament';
-    const resume = state.game ? `<button class="primary big" data-act="resume">${t('前回のゲームを続ける (ハンド {0})', state.game.handNo)}</button><p class="hint" style="text-align:center;margin-bottom:12px">${t('新しく始めると前回のデータは消えます')}</p>` : '';
+    let resume = '';
+    if (state.game) {
+      resume = `<button class="primary big" data-act="resume">${t('前回のゲームを続ける (ハンド {0})', state.game.handNo)}</button><p class="hint" style="text-align:center;margin-bottom:12px">${t('新しく始めると前回のデータは消えます')}</p>`;
+    } else if (state.archive && state.archive.game) {
+      const a = state.archive;
+      resume = `<div class="card archive">
+        <h3>${t('前回のゲーム')}</h3>
+        <p class="hint" style="margin:0 0 10px">${t(a.game.mode === 'tournament' ? 'トーナメント' : 'キャッシュゲーム')} ・ ${t('{0} ハンド', a.game.handNo)} ・ ${new Date(a.endedAt).toLocaleString()}</p>
+        <div class="row">
+          <button data-act="archiveSummary">${t('結果を見る')}</button>
+          <button data-act="restoreArchive">${t('復元して続ける')}</button>
+        </div>
+        <p class="hint">${t('次のゲームが終わるまで保管されます。')}</p>
+      </div>`;
+    }
     const names = Array.from({ length: s.count }, (_, i) => `
       <div class="nm"><span>${i + 1}</span><input type="text" data-field="name" data-i="${i}" value="${esc(s.names[i] || '')}" placeholder="P${i + 1}" maxlength="10" enterkeyhint="next"></div>`).join('');
     const anteSeg = (field, cur) => `
@@ -253,6 +338,7 @@
       ${gameCard}
       <button class="primary big" data-act="start">${t('ゲームを始める')}</button>
       <p class="hint" style="text-align:center">${t('画面は端末に自動保存されます。ブラウザを閉じても続きから再開できます。')}</p>
+      <button class="small ghost" style="margin:6px auto 0;display:block" data-act="sheet" data-type="restoreBackup">${t('バックアップ文字列から復元')}</button>
     </div>`;
   }
 
@@ -398,8 +484,7 @@
   }
 
   // ----- summary -----
-  function renderSummary() {
-    const g = state.game;
+  function renderSummary(g, isArchive) {
     const rows = E.summary(g).map((r, i) => `<tr><td>${i + 1}. ${esc(r.name)}${r.out && g.mode === 'tournament' ? `<br><small style="color:var(--muted)">${t('ハンド {0} で敗退', r.bustHand)}</small>` : ''}</td><td>${fmt(r.buyIn)}</td><td>${fmt(r.stack)}</td><td class="${r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : ''}">${r.net > 0 ? '+' : ''}${fmt(r.net)}</td></tr>`).join('');
     return `<div class="screen summary">
       <h1 class="title">${t('集計')}</h1>
@@ -407,9 +492,9 @@
       <div class="card">
         <table><thead><tr><th>${t('プレイヤー')}</th><th>${t('持込')}</th><th>${t('最終')}</th><th>${t('収支')}</th></tr></thead><tbody>${rows}</tbody></table>
       </div>
-      <button class="big" data-act="backToTable">${t('テーブルに戻る')}</button>
+      ${isArchive ? `<button class="big" data-act="backToSetup">${t('設定に戻る')}</button>` : `<button class="big" data-act="backToTable">${t('テーブルに戻る')}</button>
       <div style="height:10px"></div>
-      <button class="primary big" data-act="newGame">${t('新しいゲームを始める')}</button>
+      <button class="primary big" data-act="newGame">${t('新しいゲームを始める')}</button>`}
     </div>`;
   }
 
@@ -428,6 +513,8 @@
         <button data-act="toggleFlip">${t('画面を180°回転')} ${state.flip ? t('（ON）') : ''}</button>
         <div class="row" style="margin-bottom:8px"><span style="flex:0 0 auto;color:var(--muted)">${t('言語')}${state.lang === 'ja' ? ' / 语言' : ''}</span>${langSeg()}</div>
         ${g.hand && g.hand.street !== 'done' ? `<button data-act="cancelHand">${t('このハンドを中止（ミスディール：チップを返す）')}</button>` : ''}
+        <button data-act="sheet" data-type="history">${t('ハンド履歴・復元')} <small style="color:var(--muted)">（${t('{0} ハンド', (g.handLog || []).length)}）</small></button>
+        <button data-act="copyBackup">${t('バックアップ文字列をコピー')}</button>
         <button data-act="summary">${t('集計を見る')}</button>
         <button class="danger" data-act="newGameConfirm">${t('ゲームを終了して新規作成')}</button>
       </div>`;
@@ -504,6 +591,28 @@
         <button data-act="raiseDelta" data-v="${bb}">＋${fmt(bb)}</button>
       </div>
       <button class="${to >= la.maxRaiseTo ? 'danger' : 'primary'} big" style="width:100%" data-act="raiseConfirm">${raiseConfirmLabel(to, la)}</button>`;
+    } else if (s.type === 'history') {
+      const log = (g.handLog || []).slice().reverse();
+      const rows = log.map((r) => {
+        const winners = Object.keys(r.won).map((id) => { const p = E.byId(g, Number(id)); return `${esc(p ? p.name : '?')} +${fmt(r.won[id])}`; }).join(', ');
+        const stacks = r.stacks.map(([id, st]) => { const p = E.byId(g, id); return `${esc(p ? p.name : '?')} ${fmt(st)}`; }).join(' / ');
+        return `<div class="hist">
+          <div class="hist-top"><b>#${r.no}</b><span>${winners}</span><button class="small" data-act="restoreHand" data-no="${r.no}">${t('ここに戻す')}</button></div>
+          <div class="hist-stacks">${stacks}</div>
+        </div>`;
+      }).join('');
+      body = `<h2>${t('ハンド履歴・復元')} ${close}</h2>
+      <p class="hint" style="margin:0 0 10px">${t('各ハンド終了直後のスタックです。「ここに戻す」でその時点からやり直せます（進行中のハンドは中止されます）。')}</p>
+      ${rows || `<p class="hint">${t('まだ終了したハンドがありません。')}</p>`}`;
+    } else if (s.type === 'showBackup') {
+      body = `<h2>${t('バックアップ文字列をコピー')} ${close}</h2>
+      <p class="hint" style="margin:0 0 8px">${t('下の文字列を全選択してコピーしてください。')}</p>
+      <textarea readonly rows="6" class="backup" onclick="this.select()">${esc(s.payload)}</textarea>`;
+    } else if (s.type === 'restoreBackup') {
+      body = `<h2>${t('バックアップ文字列から復元')} ${close}</h2>
+      <p class="hint" style="margin:0 0 8px">${t('メニューの「バックアップ文字列をコピー」で取った文字列を貼り付けてください。')}</p>
+      <textarea id="backup-text" rows="6" class="backup" placeholder="{...}"></textarea>
+      <button class="primary big" style="width:100%;margin-top:10px" data-act="doRestoreBackup">${t('復元する')}</button>`;
     } else if (s.type === 'confirm') {
       body = `<h2>${t(s.title)} ${close}</h2>
       <p>${t(s.text, ...(s.args || []))}</p>
@@ -568,6 +677,7 @@
       cfg.levelMinutes = s.levelMinutes;
       cfg.levels = s.levels.map((l) => ({ ...l, ante: s.tAnteMode === 'none' ? 0 : l.ante }));
     }
+    if (state.game) state.archive = { game: state.game, endedAt: Date.now() };
     state.game = E.createGame(cfg);
     state.history = [];
     state.screen = 'table';
@@ -575,6 +685,7 @@
     save();
     render();
     requestWakeLock();
+    requestPersistentStorage();
   }
 
   function nextLevelGuess(levels) {
@@ -607,6 +718,50 @@
     },
     start() { startGame(); },
     resume() { state.screen = 'table'; save(); render(); requestWakeLock(); },
+    archiveSummary() { state.screen = 'archiveSummary'; save(); render(); },
+    backToSetup() { state.screen = 'setup'; save(); render(); },
+    restoreArchive() {
+      if (!state.archive || !state.archive.game) return;
+      state.game = state.archive.game;
+      state.archive = null;
+      state.history = [];
+      state.screen = 'table';
+      save(); render(); requestWakeLock();
+      toast('前回のゲームを復元しました');
+    },
+    restoreHand(d) {
+      ui.sheet = { type: 'confirm', title: 'ハンド履歴・復元', text: 'ハンド #{0} 終了直後の状態に戻します。それ以降の結果は消えます。', args: [d.no], ok: 'ここに戻す', act: 'restoreHandConfirm', no: Number(d.no) };
+      render();
+    },
+    restoreHandConfirm() {
+      const no = ui.sheet.no;
+      ui.sheet = null;
+      mutate((g) => { E.restoreToHand(g, no); ui.showdown = {}; toast('ハンド #{0} の終了時点に戻しました', [no]); });
+    },
+    async copyBackup() {
+      const payload = JSON.stringify({ v: 1, game: state.game, archive: state.archive || null, at: Date.now() });
+      ui.sheet = null;
+      try {
+        await navigator.clipboard.writeText(payload);
+        toast('コピーしました。メモ帳などに貼り付けて保存してください。');
+      } catch (e) {
+        ui.sheet = { type: 'showBackup', payload };
+      }
+      render();
+    },
+    doRestoreBackup() {
+      let data;
+      try { data = JSON.parse(document.getElementById('backup-text').value.trim()); } catch (e) { return toast('文字列を読み取れませんでした'); }
+      if (!data || !data.game || !Array.isArray(data.game.players)) return toast('文字列を読み取れませんでした');
+      if (state.game) state.archive = { game: state.game, endedAt: Date.now() };
+      else if (data.archive) state.archive = data.archive;
+      state.game = data.game;
+      state.history = [];
+      state.screen = 'table';
+      ui.sheet = null;
+      save(); render(); requestWakeLock();
+      toast('バックアップから復元しました');
+    },
 
     // table
     deal() { mutate((g) => { E.startHand(g); ui.showdown = {}; announceDealer(g); }); },
@@ -731,6 +886,7 @@
         state.setup.count = Math.max(2, Math.min(10, alive.length));
         alive.slice(0, 10).forEach((p, i) => { state.setup.names[i] = p.name; });
       }
+      if (g) state.archive = { game: g, endedAt: Date.now() };
       state.game = null;
       state.history = [];
       state.screen = 'setup';
@@ -827,5 +983,7 @@
   });
 
   render();
+  renderSaveBanner();
   if (state.screen === 'table') requestWakeLock();
+  recoverFromIdb();
 })();

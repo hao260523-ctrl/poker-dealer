@@ -221,3 +221,26 @@ test('summary nets', () => {
   const s = E.summary(g);
   assert.deepEqual(s.map((x) => [x.id, x.buyIn, x.net]), [[1, 100, 0], [2, 150, 0]]);
 });
+
+test('hand log records each hand and restoreToHand rolls stacks back', () => {
+  const g = game([100, 100, 100]);
+  E.startHand(g);
+  E.act(g, 'fold'); E.act(g, 'fold'); // BB (P3) wins 3
+  E.endHand(g);
+  E.startHand(g); // dealer P2
+  E.act(g, 'raise', 20); E.act(g, 'call'); E.act(g, 'fold'); // P3 raises, P1 calls, P2 folds -> flop
+  E.act(g, 'raise', 50); E.act(g, 'fold'); // P3 bets, P1 folds -> P3 wins
+  E.endHand(g);
+  assert.equal(g.handLog.length, 2);
+  assert.deepEqual(g.handLog[1].stacks, [[1, 98], [2, 79], [3, 123]]);
+  E.startHand(g); // hand 3 in progress
+  E.act(g, 'call');
+  E.restoreToHand(g, 1);
+  assert.deepEqual(stacks(g), [100, 99, 101]);
+  assert.equal(g.handNo, 1);
+  assert.equal(g.hand, null);
+  assert.equal(g.handLog.length, 1);
+  const h = E.startHand(g);
+  assert.equal(h.no, 2);
+  assert.equal(h.dealerId, 2); // button continues from hand 1's dealer (P1)
+});

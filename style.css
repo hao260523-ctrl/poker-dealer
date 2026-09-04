@@ -214,3 +214,12 @@ input[type="range"] { width: 100%; accent-color: var(--gold); height: 40px; }
 .lang-zh .potbox .street .bi .ja { opacity: 0.5; }
 .lang-zh .topbar .info span .bi { vertical-align: top; }
 .seg.lang button { font-weight: 700; }
+
+.savebanner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; background: var(--red); color: #fff; font-weight: 700; text-align: center; padding: 10px 14px calc(var(--safe-bottom) + 10px); font-size: 14px; }
+.hist { background: rgba(0, 0, 0, 0.2); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+.hist-top { display: flex; align-items: center; gap: 10px; }
+.hist-top b { color: var(--gold); min-width: 36px; }
+.hist-top span { flex: 1; font-size: 14px; }
+.hist-stacks { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.card.archive { border-color: rgba(245, 197, 66, 0.4); }
+textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px; font-family: monospace; }

@@ -445,6 +445,28 @@
     if (g.mode === 'tournament') {
       for (const p of g.players) if (!p.out && p.stack === 0) { p.out = true; p.bustHand = h.no; }
     }
+    // per-hand checkpoint (stacks right after the hand) for review / recovery
+    g.handLog = g.handLog || [];
+    g.handLog.push({ no: h.no, dealerId: h.dealerId, won, stacks: g.players.map((p) => [p.id, p.stack]), at: Date.now() });
+    if (g.handLog.length > 500) g.handLog.shift();
+  }
+
+  /** Roll the table back to the state right after hand `no` finished (stacks, button, hand counter). */
+  function restoreToHand(g, no) {
+    const rec = (g.handLog || []).find((r) => r.no === no);
+    if (!rec) throw new Error('その履歴が見つかりません');
+    for (const [id, stack] of rec.stacks) { const p = byId(g, id); if (p) p.stack = stack; }
+    g.hand = null;
+    g.handNo = no;
+    g.dealerIdx = idxOf(g, rec.dealerId);
+    g.handLog = g.handLog.filter((r) => r.no <= no);
+    g.lastResult = { handNo: no, won: rec.won, pots: [] };
+    if (g.mode === 'tournament') {
+      for (const p of g.players) {
+        if (p.stack > 0 && p.out) { p.out = false; delete p.bustHand; }
+        if (p.stack === 0 && !p.out) { p.out = true; p.bustHand = no; }
+      }
+    }
   }
 
   function endHand(g) {
@@ -494,7 +516,7 @@
 
   return {
     STREETS, clone, defaultLevels, createGame, applyLevel, setLevel, tickTimer, startTimer, pauseTimer,
-    byId, idxOf, eligiblePlayers, canStartHand, startHand, legalActions, act, computePots, awardPots, endHand, cancelHand,
+    byId, idxOf, eligiblePlayers, canStartHand, startHand, legalActions, act, computePots, awardPots, endHand, cancelHand, restoreToHand,
     addChips, addPlayer, setBlinds, summary, totalPot, inHandIds, activeIds,
   };
 });
