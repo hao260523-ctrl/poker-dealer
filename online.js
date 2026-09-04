@@ -13,14 +13,13 @@
   const REVEAL_MS = 1300;
   const NEXT_HAND_MS = 9000;
 
-  Object.assign(ui, { lobby: null, me: null, meta: null, netStatus: 'idle', proxy: null, cardsUp: null, swipe: { n: 0, at: 0 }, lastPong: 0, join: null });
+  Object.assign(ui, { lobby: null, me: null, meta: null, netStatus: 'idle', proxy: null, cardsUp: null, swipe: { n: 0, at: 0 }, lastPong: 0, join: null, welcomed: false, helloAt: 0, joinError: false });
 
   // ---------- helpers ----------
   const rnd = (n) => { const b = new Uint32Array(1); crypto.getRandomValues(b); return b[0] % n; };
-  const genRoom = () => String(100000 + rnd(900000));
   const genPw = () => String(rnd(10000)).padStart(4, '0');
   const genToken = () => [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('');
-  const roomLink = (o) => `${location.origin}${location.pathname}?room=${o.room}&pw=${o.pw}`;
+  const roomLink = (o) => `${location.origin}${location.pathname}?room=${o.room || ''}&pw=${o.pw}`;
   const clean = (s) => String(s || '').trim().slice(0, 12);
   const myPid = () => (isHost() ? HOST_PID : (ui.me != null ? ui.me : (ol() && ol().me != null ? ol().me : null)));
   const EMOJI = ['🙂', '😎', '🦊', '🐱', '🐶', '🐼', '🐸', '🐵', '🦁', '🐯', '🐨', '🐰'];
@@ -139,7 +138,7 @@
   N.on({
     status: (s) => { ui.netStatus = s; A.render(); },
     open: () => { if (isGuest()) sendHello(); },
-    hostLost: () => { A.render(); },
+    hostLost: () => { ui.welcomed = false; ui.firstHelloAt = 0; A.render(); },
     message: (c, m) => { try { if (isHost()) hostMsg(c, m); else if (isGuest()) guestMsg(c, m); } catch (e) { console.error(e); } },
     close: (c, meta) => { if (isHost()) hostClose(meta); },
     error: (e) => { console.warn('net error', e); if (e && e.type === 'browser-incompatible') A.toast('このブラウザは対応していません'); },
@@ -223,12 +222,15 @@
 
   function sendHello() {
     const o = ol();
+    if (!o) return;
+    ui.helloAt = Date.now();
+    if (!ui.firstHelloAt) ui.firstHelloAt = ui.helloAt;
     N.sendHost({ t: 'hello', token: o.token, name: o.name, pw: o.pw });
   }
 
   function guestMsg(c, m) {
     if (m.t === 'pong') { ui.lastPong = Date.now(); return; }
-    if (m.t === 'welcome') { ui.me = m.me; ol().me = m.me; A.save(); return; }
+    if (m.t === 'welcome') { ui.me = m.me; ol().me = m.me; ui.welcomed = true; ui.joinError = false; ui.firstHelloAt = 0; A.save(); A.render(); return; }
     if (m.t === 'denied') {
       N.destroy();
       A.toast(m.reason === 'pw' ? 'パスワードが違います' : 'ゲーム進行中のため入室できません（キャッシュゲームなら途中参加できます）');
@@ -264,6 +266,13 @@
       if (ui.lastPong && Date.now() - ui.lastPong > 30000) { ui.lastPong = 0; N.kick(); }
     }
   }, 10000);
+  setInterval(() => {
+    if (!isGuest() || ui.welcomed) return;
+    const now = Date.now();
+    // host is visibly present (plain beacon) but never answered our (encrypted) hello -> wrong password
+    if (N.hostSeen && ui.firstHelloAt && now - ui.firstHelloAt > 9000 && !ui.joinError) { ui.joinError = true; A.render(); }
+    if (ui.helloAt && now - ui.helloAt > 5000 && N.status !== 'idle') sendHello();
+  }, 2500);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ol()) { N.kick(); if (isGuest()) ui.lastPong = Date.now(); } });
   A.hooks.tick = () => {
     if (isHost()) { hostTick(); return false; }
@@ -283,23 +292,26 @@
 
   // ---------- connection lifecycle ----------
   async function startHosting(o) {
-    for (let i = 0; i < 6; i++) {
-      try { await N.host(o.room); return true; } catch (e) {
-        if (e && e.type === 'unavailable-id') { await new Promise((r) => setTimeout(r, 3000)); continue; }
-        return false;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const room = await N.host(o.room, o.pw);
+        if (!o.room) { o.room = room; A.save(); }
+        return true;
+      } catch (e) {
+        await new Promise((r) => setTimeout(r, 2000));
       }
     }
     return false;
   }
 
   async function createRoom(name) {
-    const o = { role: 'host', room: genRoom(), pw: genPw(), name: clean(name) || 'Host', token: genToken(), seats: {}, lobby: [], autoNext: true };
+    const o = { role: 'host', room: null, pw: genPw(), name: clean(name) || 'Host', token: genToken(), seats: {}, lobby: [], autoNext: true };
     st().online = o;
     st().screen = 'lobby';
     st().setup.cards = true;
     A.save(); A.render();
     const ok = await startHosting(o);
-    if (!ok) A.toast('ルームを開けませんでした。通信状態を確認してください。');
+    if (!ok) { A.toast('ルームを開けませんでした。通信状態を確認してください。'); st().online = null; st().screen = 'onlineHome'; A.save(); }
     A.render();
   }
 
@@ -308,9 +320,9 @@
     st().guestTokens = { ...(st().guestTokens || {}), [o.room]: o.token };
     st().online = o;
     st().screen = 'lobby';
-    ui.lobby = null;
+    ui.lobby = null; ui.welcomed = false; ui.joinError = false; ui.helloAt = 0; ui.firstHelloAt = 0;
     A.save(); A.render();
-    await N.join(o.room);
+    await N.join(o.room, o.pw);
   }
 
   function leaveRoom() {
@@ -409,6 +421,14 @@
       A.render();
     },
     olLeaveConfirm() { leaveRoom(); },
+    olRetryJoin() {
+      const o = ol();
+      N.destroy();
+      ui.join = { room: o.room, pw: '' };
+      st().online = null;
+      st().screen = 'onlineHome';
+      A.save(); A.render();
+    },
     olKick(d) {
       const o = ol();
       if (!isHost() || st().game) return;
@@ -526,11 +546,11 @@
       const rows = [{ name: o.name, connected: true, host: true }, ...o.lobby].map((x) => `<div class="lobby-row"><span class="conn ${x.connected ? 'ok' : 'ng'}"></span><span class="nm">${esc(x.name)}${x.host ? ` <small>(${t('ホスト')})</small>` : ''}</span>${x.host ? '' : `<button class="small ghost" data-act="olKick" data-token="${x.token}">✕</button>`}</div>`).join('');
       const n = 1 + o.lobby.filter((x) => x.connected).length;
       return `<div class="screen">
-        <div class="topbar"><div class="info"><b>${t('ルーム')} ${o.room}</b><span>${t('パスワード')} ${o.pw} ${connDot()} ${esc(statusLabel())}</span></div><button class="icon" data-act="menu">☰</button></div>
+        <div class="topbar"><div class="info"><b>${t('ルーム')} ${o.room || '…'}</b><span>${t('パスワード')} ${o.pw} ${connDot()} ${esc(statusLabel())}</span></div><button class="icon" data-act="menu">☰</button></div>
         <div class="card roomcard">
-          <div class="roomnum"><small>${t('ルーム番号')}</small><b>${o.room}</b></div>
+          ${o.room ? `<div class="roomnum"><small>${t('ルーム番号')}</small><b>${o.room}</b></div>
           <div class="roomnum"><small>${t('パスワード')}</small><b>${o.pw}</b></div>
-          <div class="row" style="margin-top:10px"><button class="primary" data-act="olShare">${t('リンクを送る')}</button><button data-act="olCopyLink">${t('リンクをコピー')}</button></div>
+          <div class="row" style="margin-top:10px"><button class="primary" data-act="olShare">${t('リンクを送る')}</button><button data-act="olCopyLink">${t('リンクをコピー')}</button></div>` : `<div class="msg big">${t('ルームを作成中…')}</div><div class="dots"><i></i><i></i><i></i></div>`}
         </div>
         <div class="card">
           <h3>${t('参加者')} (${n})</h3>
@@ -553,8 +573,8 @@
         ${rows || `<p class="hint">${t('ホストに接続しています…')}</p>`}
       </div>
       <div class="card" style="text-align:center">
-        <div class="msg big">${lb && lb.started ? t('ゲーム進行中。次のハンドから参加します') : t('ホストがゲームを開始するのを待っています')}</div>
-        <div class="dots"><i></i><i></i><i></i></div>
+        ${ui.joinError ? `<div class="msg big" style="color:var(--gold)">${t('パスワードが違うか、入室できませんでした。ルーム番号とパスワードを確認してください。')}</div><button data-act="olRetryJoin">${t('ルーム番号・パスワードを入れ直す')}</button>`
+          : `<div class="msg big">${!ui.welcomed ? t('ホストに接続しています…') : lb && lb.started ? t('ゲーム進行中。次のハンドから参加します') : t('ホストがゲームを開始するのを待っています')}</div><div class="dots"><i></i><i></i><i></i></div>`}
       </div>
       <button class="small ghost" style="margin:8px auto 0;display:block" data-act="olLeave">${t('ルームを退出')}</button>
     </div>`;
@@ -769,7 +789,8 @@
     if (o && o.role === 'guest' && (!room || room === o.room)) {
       st().screen = st().game ? 'table' : 'lobby';
       try { A.render(); } catch (e) { console.error(e); }
-      await N.join(o.room);
+      ui.welcomed = false; ui.joinError = false; ui.helloAt = 0; ui.firstHelloAt = 0;
+      await N.join(o.room, o.pw);
       return;
     }
     if (room) {

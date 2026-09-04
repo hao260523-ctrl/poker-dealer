@@ -27,6 +27,12 @@
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    // a new version took over -> reload once so the page runs the new code
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) { hadController = false; location.reload(); }
+      else hadController = true;
+    });
   }
 </script>
 </body>
