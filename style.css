@@ -304,23 +304,23 @@ textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25);
 @keyframes dot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
 
 /* ---- immersive table ---- */
-.tv { position: fixed; inset: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 35%, #123f2e, #071e15 75%); display: flex; flex-direction: column; }
-.tv-felt { position: absolute; left: -35%; right: -35%; top: 150px; bottom: 210px; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, #1f7a4f, #135a3a 60%, #0f4a2f); border: 14px solid #3b2314; box-shadow: inset 0 0 60px rgba(0,0,0,.5), 0 10px 40px rgba(0,0,0,.6); }
-.tv-top { position: relative; z-index: 2; display: flex; align-items: center; gap: 8px; padding: calc(var(--safe-top) + 8px) 12px 4px; }
+.tv { position: fixed; inset: 0; overflow: auto; overscroll-behavior: contain; background: radial-gradient(ellipse at 50% 35%, #123f2e, #071e15 75%); display: flex; flex-direction: column; }
+.tv-felt { position: fixed; left: -35%; right: -35%; top: 150px; bottom: 190px; z-index: 0; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, #1f7a4f, #135a3a 60%, #0f4a2f); border: 14px solid #3b2314; box-shadow: inset 0 0 60px rgba(0,0,0,.5), 0 10px 40px rgba(0,0,0,.6); }
+.tv-top { position: relative; z-index: 2; flex: none; display: flex; align-items: center; gap: 8px; padding: calc(var(--safe-top) + 8px) 12px 4px; }
 .tv-top .info { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .tv-top .info b { font-size: 15px; }
 .tv-top .info span { font-size: 12px; color: var(--muted); }
-.tv-opps { position: relative; z-index: 2; display: flex; justify-content: center; align-items: flex-start; gap: 6px; padding: 0 6px; flex-wrap: wrap; }
+.tv-opps { position: relative; z-index: 2; flex: none; display: flex; justify-content: center; align-items: flex-start; gap: 6px; padding: 0 6px; flex-wrap: wrap; }
 .opp { width: 96px; text-align: center; position: relative; padding-bottom: 4px; }
 .opp .bust { height: 62px; overflow: hidden; position: relative; margin: -8px auto 0; }
 .avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--c); display: inline-flex; align-items: center; justify-content: center; font-size: 34px; margin: 4px auto 0; box-shadow: 0 4px 10px rgba(0,0,0,.5); border: 3px solid rgba(255,255,255,.7); }
 .avatar.sm { width: 40px; height: 40px; font-size: 22px; margin: 0; border-width: 2px; }
 .tv.hu .opp { width: 170px; }
 .tv.hu .opp .bust { height: 92px; margin-top: -26px; }
-.tv.hu .avatar { width: 118px; height: 118px; font-size: 64px; }
+.tv.hu .opp .avatar { width: 118px; height: 118px; font-size: 64px; }
 .tv.many .opp { width: 72px; }
 .tv.many .opp .bust { height: 46px; }
-.tv.many .avatar { width: 48px; height: 48px; font-size: 26px; }
+.tv.many .opp .avatar { width: 48px; height: 48px; font-size: 26px; }
 .opp .dbtn, .merow .dbtn { display: inline-block; background: #fff; color: #111; font-style: normal; font-weight: 900; font-size: 11px; width: 20px; height: 20px; line-height: 20px; border-radius: 50%; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
 .opp .bust .dbtn { position: absolute; right: 8px; bottom: 2px; }
 .opp-name { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -335,10 +335,10 @@ textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25);
 .opp.dim { opacity: .45; }
 .opp.offline .avatar { filter: grayscale(1); }
 .opp.won .avatar { box-shadow: 0 0 0 4px var(--green); }
-.tv-center { position: relative; z-index: 2; text-align: center; margin-top: 8px; }
+.tv-center { position: relative; z-index: 2; text-align: center; margin-top: 8px; flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 150px; padding-bottom: 6px; }
 .tv-pot { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,0,0,.35); border-radius: 999px; padding: 6px 14px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
 .tv-center .board { margin-top: 10px; }
-.tv-me { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 8px 12px calc(var(--safe-bottom) + 10px); background: linear-gradient(to top, rgba(4,20,14,.96) 70%, rgba(4,20,14,0)); }
+.tv-me { position: relative; z-index: 3; flex: none; margin-top: auto; padding: 8px 12px calc(var(--safe-bottom) + 10px); background: linear-gradient(to top, rgba(4,20,14,.96) 70%, rgba(4,20,14,0)); }
 .merow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .meinfo { display: flex; align-items: center; gap: 10px; }
 .meinfo .opp-name { text-align: left; }
@@ -352,4 +352,5 @@ textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25);
 .netbar { position: absolute; left: 50%; top: calc(var(--safe-top) + 60px); transform: translateX(-50%); z-index: 5; background: rgba(0,0,0,.8); color: #fff; padding: 8px 14px; border-radius: 999px; font-size: 13px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .tv .actions button.big { min-height: 58px; font-size: 18px; }
 .lang-zh .tv .actions button.big { min-height: 68px; }
-@media (max-height: 700px) { .tv.hu .opp .bust { height: 70px; } .tv.hu .avatar { width: 96px; height: 96px; font-size: 50px; } .sq { width: 76px; height: 108px; } .sq-face .ix b { font-size: 22px; } .sq-face .ix i { font-size: 18px; } }
+@media (max-height: 780px) { .tv .mycards .sq { width: 72px; height: 102px; } .tv .sq-face .ix b { font-size: 22px; } .tv .sq-face .ix i { font-size: 18px; } .tv .sq-face .pip { font-size: 38px; } .tv .mycards { padding: 2px 0 2px; } .tv .cardtools { margin: 0 0 4px; } .tv .actions button.big { min-height: 50px; font-size: 16px; } }
+@media (max-height: 700px) { .tv.hu .opp .bust { height: 70px; margin-top: -20px; } .tv.hu .opp .avatar { width: 92px; height: 92px; font-size: 48px; } .tv-center { min-height: 120px; } .tv .pcard.md { width: 38px; height: 54px; font-size: 17px; } .tv .mycards .sq { width: 64px; height: 90px; } .tv .opp-cards { min-height: 30px; } }
