@@ -13,7 +13,7 @@
   const REVEAL_MS = 1300;
   const NEXT_HAND_MS = 9000;
 
-  Object.assign(ui, { lobby: null, me: null, meta: null, netStatus: 'idle', proxy: null, cardsUp: null, swipe: { n: 0, at: 0 }, lastPong: 0, join: null, welcomed: false, helloAt: 0, joinError: false });
+  Object.assign(ui, { lobby: null, me: null, meta: null, netStatus: 'idle', proxy: null, cardsDown: null, swipe: { n: 0, at: 0 }, lastPong: 0, join: null, welcomed: false, helloAt: 0, joinError: false });
 
   // ---------- helpers ----------
   const rnd = (n) => { const b = new Uint32Array(1); crypto.getRandomValues(b); return b[0] % n; };
@@ -461,7 +461,7 @@
     olCardsUp() {
       const g = st().game;
       const key = g && g.hand ? g.hand.no : 0;
-      ui.cardsUp = ui.cardsUp === key ? null : key;
+      ui.cardsDown = ui.cardsDown === key ? null : key;
       A.render();
     },
     olRoomInfo() { ui.sheet = { type: 'olRoom' }; A.render(); },
@@ -649,11 +649,12 @@
     // my cards
     const myHole = h && h.hole && h.hole[me];
     const meIn = h && h.inHandIds.includes(me) && !h.folded[me];
-    const up = ui.cardsUp === (h ? h.no : 0);
+    // on your own phone the cards are face-up by default; "伏せる" hides them for this hand (long press peeks)
+    const up = ui.cardsDown !== (h ? h.no : 0);
     let cardsArea = '';
     if (g.cards && myHole && meIn) {
       cardsArea = `<div class="mycards" data-mycards>${myHole.map((c) => A.squeezeHtml(c, up || showAll)).join('')}<div class="foldhint" hidden>${t('もう一度上にスワイプでフォールド')}</div></div>
-        <div class="cardtools"><button class="small ghost" data-act="olCardsUp">${up ? t('伏せる') : t('表にする')}</button><span class="hint">${t('長押しで見る ・ 上に2回スワイプでフォールド')}</span></div>`;
+        <div class="cardtools"><button class="small ghost" data-act="olCardsUp">${up ? t('伏せる') : t('表にする')}</button><span class="hint">${up ? t('上に2回スワイプでフォールド') : t('長押しで見る ・ 上に2回スワイプでフォールド')}</span></div>`;
     } else if (h && h.inHandIds.includes(me) && h.folded[me]) {
       cardsArea = `<div class="mycards folded"><div class="sq off"></div><div class="sq off"></div></div><div class="cardtools"><span class="hint">${t('フォールドしました')}</span></div>`;
     }
