@@ -409,3 +409,6 @@ textarea.backup { width: 100%; font-size: 12px; background: rgba(0, 0, 0, 0.25);
 .tv .results.compact div { padding: 2px 4px; font-size: clamp(12px, 1.7dvh, 15px); }
 .tv .results div small { font-size: clamp(10px, 1.4dvh, 12px); }
 @media (max-height: 600px) { .tv .cardtools .hint { display: none; } .tv .opp-tag { display: none; } }
+
+.info[role="button"] { cursor: pointer; }
+.info .edit { font-size: 11px; color: var(--muted); font-weight: 400; }

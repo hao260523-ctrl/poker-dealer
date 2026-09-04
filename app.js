@@ -451,8 +451,8 @@
     }
     const header = `
       <div class="topbar">
-        <div class="info">
-          <b>${blindsLabel(g.blinds, true)}</b>
+        <div class="info" data-act="sheet" data-type="blinds" role="button">
+          <b>${blindsLabel(g.blinds, true)} <small class="edit">✎</small></b>
           <span>${g.mode === 'tournament' ? `Lv${g.levelIndex + 1} ・ ` : ''}#${h ? h.no : g.handNo + 1} ・ ${h ? street(h.street) : t('待機中')}</span>
         </div>
         ${timer}

@@ -647,7 +647,7 @@
     const pot = h ? E.totalPot(h) : 0;
     const timer = g.timer ? `<div class="timer ${g.timer.running ? '' : 'paused'}"><span class="t" id="timer">${A.mmss(g.timer.remainingMs)}</span>${isHost() ? `<button class="icon ghost" data-act="timer">${g.timer.running ? '⏸' : '▶'}</button>` : ''}</div>` : '';
     const header = `<div class="tv-top">
-      <div class="info"><b>${A.blindsLabel(g.blinds, true)}</b><span>${g.mode === 'tournament' ? `Lv${g.levelIndex + 1} ・ ` : ''}#${h ? h.no : g.handNo + 1}${h && !done ? ' ・ ' + A.street(h.street === 'showdown' ? 'showdown' : h.street) : ''} ${connDot()}</span></div>
+      <div class="info" ${isHost() ? 'data-act="sheet" data-type="blinds" role="button"' : ''}><b>${A.blindsLabel(g.blinds, true)}${isHost() ? ' <small class="edit">✎</small>' : ''}</b><span>${g.mode === 'tournament' ? `Lv${g.levelIndex + 1} ・ ` : ''}#${h ? h.no : g.handNo + 1}${h && !done ? ' ・ ' + A.street(h.street === 'showdown' ? 'showdown' : h.street) : ''} ${connDot()}</span></div>
       ${timer}<button class="icon" data-act="menu">☰</button>
     </div>`;
 
